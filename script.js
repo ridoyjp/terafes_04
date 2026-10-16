@@ -3,10 +3,38 @@ const infoList=document.getElementById('infoList');const infoToggle=document.get
 document.getElementById('introLogo').src=document.querySelector('.head img').src;
 document.getElementById('backButton').addEventListener('click',()=>{document.getElementById('chat').classList.remove('active');document.getElementById('intro').hidden=false;document.getElementById('startButton').focus();});
 document.getElementById('startButton').addEventListener('click',()=>{document.getElementById('intro').hidden=true;document.getElementById('chat').classList.add('active');document.getElementById('input').focus();});
-const BOT_ICON='assets/robot-logo.png';const messages=document.getElementById('messages'),input=document.getElementById('input');function add(t,user){const row=document.createElement('div');row.className='row'+(user?' user':'');const av=document.createElement('span');av.className='avatar';if(user){av.textContent='👤';}else{av.classList.add('bot-icon');const img=document.createElement('img');img.src=BOT_ICON;img.alt='Chatbot';av.appendChild(img);}const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=t;row.append(av,bubble);messages.append(row);messages.scrollTop=messages.scrollHeight}function answer(q){const s=q.toLowerCase();if(/食|food|飲|屋台|グルメ|たべ/.test(s))return '🍜 食べ物コーナーでは屋台グルメやドリンクを楽しめます。詳しい出店場所・メニューは当日の案内をご確認ください。';if(/ゲーム|game|遊|体験/.test(s))return '🎮 ゲームや体験型ブースを楽しめます！詳細は会場の案内をご確認ください。';if(/ステージ|stage|音楽|ライブ|発表/.test(s))return '🎤 ステージイベントや発表については公式スケジュールをご確認ください。';if(/場所|どこ|地図|map|トイレ|休憩|guide/.test(s))return '🗺️ 会場の案内掲示をご確認ください。スタッフにもお尋ねください！';if(/時間|いつ|日程|開催/.test(s))return '🕒 開催日時は学校からの公式案内をご確認ください。';if(/おすすめ|recommend/.test(s))return '🎉 屋台グルメ🍜、ゲーム体験🎮、ステージ🎤がおすすめです！どれが気になりますか？';if(/こんにちは|hello|hi/.test(s))return 'こんにちは！😊 学園祭について何を知りたいですか？';return '🎉「食べ物」「ゲーム」「ステージ」「場所」「おすすめ」などについて質問してください！'}function ask(q){q=q.trim();if(!q)return;add(q,true);(()=>{const typing=document.createElement('div');typing.className='row bot-typing';typing.setAttribute('aria-label','返信を入力中');typing.innerHTML='<span class="avatar bot-icon"><img src="assets/robot-logo.png" alt="Chatbot"></span><div class="bubble"><span class="typing-indicator"><span></span><span></span><span></span></span></div>';messages.append(typing);messages.scrollTop=messages.scrollHeight;setTimeout(()=>{typing.remove();add(answer(q),false);speakAnswer(answer(q))},Math.min(1050,450+q.length*22))})()}document.getElementById('form').addEventListener('submit',e=>{e.preventDefault();ask(input.value);input.value=''});document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
+const BOT_ICON='assets/robot-logo.png';const messages=document.getElementById('messages'),input=document.getElementById('input');function add(t,user){const row=document.createElement('div');row.className='row'+(user?' user':'');const av=document.createElement('span');av.className='avatar';if(user){av.textContent='👤';}else{av.classList.add('bot-icon');const img=document.createElement('img');img.src=BOT_ICON;img.alt='Chatbot';av.appendChild(img);}const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=t;row.append(av,bubble);messages.append(row);messages.scrollTop=messages.scrollHeight}function answer(q){const s=q.toLowerCase();if(/食|food|飲|屋台|グルメ|たべ/.test(s))return '🍜 食べ物コーナーでは屋台グルメやドリンクを楽しめます。詳しい出店場所・メニューは当日の案内をご確認ください。';if(/ゲーム|game|遊|体験/.test(s))return '🎮 ゲームや体験型ブースを楽しめます！詳細は会場の案内をご確認ください。';if(/ステージ|stage|音楽|ライブ|発表/.test(s))return '🎤 ステージイベントや発表については公式スケジュールをご確認ください。';if(/場所|どこ|地図|map|トイレ|休憩|guide/.test(s))return '🗺️ 会場の案内掲示をご確認ください。スタッフにもお尋ねください！';if(/時間|いつ|日程|開催/.test(s))return '🕒 開催日時は学校からの公式案内をご確認ください。';if(/おすすめ|recommend/.test(s))return '🎉 屋台グルメ🍜、ゲーム体験🎮、ステージ🎤がおすすめです！どれが気になりますか？';if(/こんにちは|hello|hi/.test(s))return 'こんにちは！😊 学園祭について何を知りたいですか？';return '🎉「食べ物」「ゲーム」「ステージ」「場所」「おすすめ」などについて質問してください！'}// The UI is unchanged. API endpoint is configured in config.js (never put a key there).
+const CHAT_API_URL=(window.GAKUEN_CHAT_CONFIG?.apiUrl||'').trim();
+const chatHistory=[];
+let pendingChat=false;
+function showTyping(){
+ const typing=document.createElement('div');typing.className='row bot-typing';typing.setAttribute('aria-label','返信を入力中');
+ typing.innerHTML='<span class="avatar bot-icon"><img src="assets/robot-logo.png" alt="Chatbot"></span><div class="bubble"><span class="typing-indicator"><span></span><span></span><span></span></span></div>';
+ messages.append(typing);messages.scrollTop=messages.scrollHeight;return typing;
+}
+async function getAIAnswer(question){
+ if(!CHAT_API_URL||CHAT_API_URL.includes('YOUR-WORKER'))return {text:'⚠️ Gemini AI এখনো সংযুক্ত করা হয়নি। Cloudflare Worker URL config.js ফাইলে সেট করো। বর্তমানে শুধু 学園祭-এর প্রাথমিক তথ্য পাওয়া যাবে।\n\n'+answer(question),fallback:true};
+ const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
+ try{
+  const response=await fetch(CHAT_API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:question,history:chatHistory.slice(-12)}),signal:controller.signal});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||typeof data.reply!=='string'||!data.reply.trim())throw new Error(data.error||'AI応答エラー');
+  return {text:data.reply.trim().slice(0,5000),fallback:false};
+ }finally{clearTimeout(timeout)}
+}
+async function ask(q){
+ q=q.trim();if(!q||pendingChat)return;
+ pendingChat=true;add(q,true);const typing=showTyping();
+ let result;
+ try{result=await getAIAnswer(q)}catch(err){console.warn('Gemini unavailable; using local answer:',err);result={text:'⚠️ AI সার্ভিস এখন পাওয়া যাচ্ছে না। Worker URL, Gemini quota অথবা Internet connection পরীক্ষা করো।\n\n'+answer(q),fallback:true};}
+ typing.remove();add(result.text,false);speakAnswer(result.text);
+ if(!result.fallback){chatHistory.push({role:'user',text:q.slice(0,4000)},{role:'model',text:result.text.slice(0,5000)});if(chatHistory.length>12)chatHistory.splice(0,chatHistory.length-12);}
+ pendingChat=false;
+}
+document.getElementById('form').addEventListener('submit',e=>{e.preventDefault();ask(input.value);input.value=''});document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
 
 
-document.querySelectorAll('.desktop-sidebar [data-q]').forEach(button=>button.addEventListener('click',()=>ask(button.dataset.q)));
+// Sidebar questions are already handled by the shared [data-q] listener.
 
 
 /* vNext effects — independent of festival Q&A logic */
@@ -43,9 +71,9 @@ function speakAnswer(text){
  if(!soundEnabled||!('speechSynthesis' in window))return;
  window.speechSynthesis.cancel();
  const utterance=new SpeechSynthesisUtterance(text.replace(/[🎉🍜🎮🎤🗺️🕒😊]/gu,''));
- utterance.lang='ja-JP';utterance.rate=1;utterance.pitch=1;
- const japaneseVoice=window.speechSynthesis.getVoices().find(v=>v.lang.toLowerCase().startsWith('ja'));
- if(japaneseVoice)utterance.voice=japaneseVoice;
+ const isBangla=/[\u0980-\u09FF]/.test(text);const isJapanese=/[\u3040-\u30FF\u3400-\u9FFF]/.test(text);utterance.lang=isBangla?'bn-BD':isJapanese?'ja-JP':'en-US';utterance.rate=1;utterance.pitch=1;
+ const matchingVoice=window.speechSynthesis.getVoices().find(v=>v.lang.toLowerCase().startsWith(utterance.lang.slice(0,2).toLowerCase()));
+ if(matchingVoice)utterance.voice=matchingVoice;
  window.speechSynthesis.speak(utterance);
 }
 if(!SpeechRecognitionAPI){
