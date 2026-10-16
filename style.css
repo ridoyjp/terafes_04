@@ -315,3 +315,149 @@ body.motion-off .row:not(.user) .avatar,body.motion-off .row .bubble,body.motion
 @keyframes mic-pulse{50%{box-shadow:0 0 0 6px #ec565533}}
 @media(max-width:560px){.composer{gap:5px!important}.composer .voice-control{width:35px;height:40px;font-size:17px}.composer input{font-size:13px;min-width:0}}
 @media(prefers-reduced-motion:reduce){.composer .voice-control.is-listening{animation:none}}
+
+/* ================================================================
+   TTC 学園祭 AI Chat Bot — Mobile usability patch
+   Keeps existing desktop colors/visual design and JS hooks intact.
+   iOS WebKit: editable fields must render at >=16px to prevent focus zoom.
+   ================================================================ */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+/* This must come after earlier .composer input font-size:13px rules. */
+#input,
+.composer input,
+input[type="text"],
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+@media (max-width: 768px) {
+  .intro,
+  .chat,
+  .chat.active {
+    width: 100% !important; /* avoid 100vw overrun in in-app browsers */
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .chat,
+  .chat.active {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+  .chat-content {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .chat .head {
+    min-width: 0;
+    flex-shrink: 0;
+    padding-right: 92px !important;
+  }
+  .chat .head > div { min-width: 0; }
+  .chat .head h1 {
+    overflow-wrap: anywhere;
+    font-size: clamp(16px, 4.5vw, 20px);
+  }
+  .chat-banner,
+  .topics,
+  .info-list,
+  .messages,
+  .composer,
+  .voice-status,
+  .foot {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .topics {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topics::-webkit-scrollbar { display: none; }
+  .topics button { flex: 0 0 auto; }
+  .messages {
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .messages .row { max-width: 100%; min-width: 0; }
+  .messages .row .bubble {
+    max-width: min(85%, calc(100% - 48px));
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    white-space: pre-wrap;
+  }
+  .composer {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px !important;
+    box-sizing: border-box;
+    width: calc(100% - 20px) !important;
+    max-width: calc(100% - 20px) !important;
+    margin: 8px 10px 4px !important;
+    padding: 6px 7px 6px 12px !important;
+    transform: none; /* focusing must not shift the input */
+  }
+  .composer:focus-within { transform: none; }
+  .composer #input {
+    width: 0; /* allow flex item to shrink on narrow phones */
+    min-width: 0 !important;
+    flex: 1 1 0%;
+    font-size: 16px !important;
+    line-height: normal;
+    min-height: 42px;
+  }
+  .composer button,
+  .composer .voice-control {
+    flex: 0 0 39px;
+    width: 39px;
+    min-width: 39px;
+    height: 42px;
+    padding: 0;
+    touch-action: manipulation;
+  }
+  .foot { flex-shrink: 0; }
+}
+
+@media (max-width: 380px) {
+  .composer { gap: 4px !important; padding-left: 9px !important; }
+  .composer button,
+  .composer .voice-control {
+    flex-basis: 35px;
+    width: 35px;
+    min-width: 35px;
+    height: 40px;
+  }
+  .chat .head { padding-right: 79px !important; }
+}
+
+/* Safe area belongs around the whole bottom UI, not inside the input pill. */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 768px) {
+    .chat .foot {
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+  }
+}
