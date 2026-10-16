@@ -306,3 +306,12 @@ body.motion-off .row:not(.user) .avatar,body.motion-off .row .bubble,body.motion
 .chat .head .back-btn:hover{background:linear-gradient(110deg,#c6f8ff,#d7e9ff)!important;color:#114c83!important;border-color:#8de8f6!important;transform:translateY(-50%) scale(1.075)!important;}
 /* Remove only the inner message-input rectangle; keep the outer composer */
 .composer input,.composer input:focus,.composer input:focus-visible{border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;}
+
+/* Small voice controls, preserving the existing composer layout. */
+.composer .voice-control{flex:0 0 auto;font-size:19px;display:grid;place-items:center;background:#e8f5fe;color:#1266a2;box-shadow:none;border:1px solid #c9e9fa}
+.composer .voice-control.is-listening{background:#ffe0e0;color:#b91c1c;animation:mic-pulse 1s ease-in-out infinite}
+.composer .voice-control:disabled{opacity:.4;cursor:not-allowed}
+.voice-status{font-size:12px;color:#12618a;text-align:center;padding:1px 12px 5px}
+@keyframes mic-pulse{50%{box-shadow:0 0 0 6px #ec565533}}
+@media(max-width:560px){.composer{gap:5px!important}.composer .voice-control{width:35px;height:40px;font-size:17px}.composer input{font-size:13px;min-width:0}}
+@media(prefers-reduced-motion:reduce){.composer .voice-control.is-listening{animation:none}}
