@@ -28,7 +28,7 @@ body{display:block!important;padding:0!important;min-height:100dvh;overflow:hidd
 .chat .head{flex-shrink:0;}
 @media(min-width:900px){.chat .messages{padding:28px max(24px,calc((100vw - 1100px)/2));}.chat .composer{margin:12px max(24px,calc((100vw - 1100px)/2));}.chat .topics{padding-left:max(24px,calc((100vw - 1100px)/2));padding-right:max(24px,calc((100vw - 1100px)/2));}}
 
-/* 2026 premium full-screen redesign */
+/* 2026 premium full-screen redesign ok*/
 :root{--navy:#071a36;--blue:#1767f2;--cyan:#22c7dc;--ink:#102542;--muted:#69809c;--line:#e6eef8}
 html,body{width:100%;height:100%;overflow:hidden}
 body{display:block;padding:0!important;min-height:100dvh;background:#eaf2ff;color:var(--ink)}
