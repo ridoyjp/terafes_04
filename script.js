@@ -643,10 +643,8 @@ const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 // The visible site name stays "AI Chat Bot"; use phonetic Japanese only for spoken welcome.
 const WELCOME_SPEECH = "こんにちは！TTC 学園祭エーアイ・チャットボットへようこそ！" +
-  "学校のことだけでなく、勉強・プログラミング・一般知識など、さまざまな質問ができます。" +
-  "日本語を基本言語とし、世界中のさまざまな言語に対応しています。" +
-  "質問した言語でAIが回答します。音声入力はご希望の言語を選択してください。" +
-  "ぜひお気軽に使ってみてください！";
+  "日本語を基本に、世界中のさまざまな言語で質問できます。" +
+  "音声でも文字でも、お気軽に質問してください！";
 
 const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 let welcomeMuted = false;
@@ -683,7 +681,7 @@ function stopWelcomeSpeech() {
 function repeatWelcome() {
   if (welcomeMuted || !isWelcomeVisible()) return;
   clearTimeout(welcomeRepeatTimer);
-  welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 800);
+  welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 250);
 }
 function playWelcomeSpeech() {
   if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible()) return;
