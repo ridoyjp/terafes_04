@@ -1,0 +1,44 @@
+{
+  "festival": "TTC 学園祭 2026",
+  "approved_by": "",
+  "last_verified": "",
+  "event_dates": [],
+  "opening_hours": "",
+  "entrance_fee": "",
+  "food_stalls": [
+    {
+      "name": "",
+      "menu": [],
+      "price_yen": null,
+      "room": "",
+      "allergens": []
+    }
+  ],
+  "games": [
+    {
+      "name": "",
+      "room": "",
+      "participation_fee_yen": null,
+      "start": "",
+      "end": ""
+    }
+  ],
+  "stage_events": [
+    {
+      "title": "",
+      "start": "",
+      "end": "",
+      "location": ""
+    }
+  ],
+  "floor_map_url": "",
+  "toilets": "",
+  "reception": "",
+  "first_aid": "",
+  "accessibility": "",
+  "lost_and_found": "",
+  "photo_policy": "",
+  "contact_on_day": "",
+  "status": "DRAFT - not approved or imported into Worker; enter real information after teacher verification",
+  "publication_rule": "Do not add unverified information, personal contact information, or invented prices/room numbers"
+}

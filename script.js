@@ -33,9 +33,13 @@ document.getElementById("introLogo").src =
   document.querySelector(".head img").src;
 
 function openChat() {
+  stopWelcomeSpeech();
+  window.speechSynthesis?.cancel();
   document.getElementById("intro").hidden = true;
   document.getElementById("chat").classList.add("active");
-  document.getElementById("input").focus();
+  if (window.matchMedia("(min-width: 901px)").matches) {
+    document.getElementById("input").focus();
+  }
 }
 
 function closeChat() {
@@ -46,6 +50,8 @@ function closeChat() {
   document.getElementById("chat").classList.remove("active");
   document.getElementById("intro").hidden = false;
   document.getElementById("startButton").focus();
+  // Resume continuous welcome narration when returning from chat.
+  if (!welcomeMuted) playWelcomeSpeech();
 }
 
 document.getElementById("startButton")
@@ -133,6 +139,33 @@ const CHAT_API_URL =
   (window.GAKUEN_CHAT_CONFIG?.apiUrl || "").trim();
 
 const chatHistory = [];
+const voiceLanguageSelect = document.getElementById("voiceLanguage");
+let lastQuestionLanguage = "";
+
+// Web Speech API does not reliably auto-detect spoken language.
+// Auto follows the browser locale; users can choose another recognition locale.
+const deviceLanguage = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
+function requestedVoiceLanguage() {
+  return voiceLanguageSelect?.value !== "auto" ? voiceLanguageSelect.value : deviceLanguage;
+}
+function detectWrittenLanguage(text) {
+  if (/[ঀ-৿]/u.test(text)) return "bn-BD";
+  if (/[぀-ヿ]/u.test(text)) return "ja-JP";
+  if (/[一-鿿]/u.test(text)) return "zh-CN"; // may also be Japanese kanji
+  if (/[가-힯]/u.test(text)) return "ko-KR";
+  if (/[ऀ-ॿ]/u.test(text)) return "hi-IN";
+  if (/[඀-෿]/u.test(text)) return "si-LK";
+  if (/[؀-ۿ]/u.test(text)) return "ar-SA";
+  if (/[฀-๿]/u.test(text)) return "th-TH";
+  if (/[Ѐ-ӿ]/u.test(text)) return "ru-RU";
+  if (/[ก-๛]/u.test(text)) return "th-TH";
+  if (/[ა-ჰ]/u.test(text)) return "ka-GE";
+  if (/[Α-ω]/u.test(text)) return "el-GR";
+  if (/[א-ת]/u.test(text)) return "he-IL";
+  if (/[Ա-ֆ]/u.test(text)) return "hy-AM";
+  return "";
+}
+
 let pendingChat = false;
 
 // ---------- TYPING INDICATOR ----------
@@ -164,68 +197,65 @@ function showTyping() {
 
 // ---------- GEMINI API REQUEST ----------
 
-async function getAIAnswer(question) {
+async function getAIAnswer(question, languageHint = "") {
   if (!CHAT_API_URL || CHAT_API_URL.includes("YOUR-WORKER")) {
-    return {
-      text: "⚠️ Gemini AIが設定されていません。\n\n" + answer(question),
-      fallback: true
-    };
+    throw new Error("AI_API_NOT_CONFIGURED");
   }
 
   const controller = new AbortController();
-
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, 30000);
-
+  const timeout = setTimeout(() => controller.abort(), 45000);
   try {
     const response = await fetch(CHAT_API_URL, {
       method: "POST",
-
-      headers: {
-        "Content-Type": "application/json"
-      },
-
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: question,
-        history: chatHistory.slice(-12)
+        history: chatHistory.slice(-12),
+        responseLanguage: languageHint
       }),
-
       signal: controller.signal
     });
 
     const data = await response.json().catch(() => ({}));
-
     if (!response.ok) {
-      console.error("Gemini API HTTP Error:", response.status, data);
-
-      throw new Error(
-        data.error || `HTTP ${response.status}`
-      );
+      console.error("AI Worker HTTP Error", response.status, data);
+      const error = new Error(String(data.error || `HTTP ${response.status}`));
+      error.status = response.status;
+      throw error;
     }
-
     if (typeof data.reply !== "string" || !data.reply.trim()) {
-      throw new Error("Gemini returned an empty response");
+      throw new Error("EMPTY_AI_REPLY");
     }
-
-    return {
-      text: data.reply.trim().slice(0, 5000),
-      fallback: false
-    };
-
+    return { text: data.reply.trim().slice(0, 5000), fallback: false };
   } finally {
     clearTimeout(timeout);
   }
 }
 
+function explainAIError(error) {
+  if (location.protocol === "file:") {
+    return "⚠️ AIはローカルファイル(file://)から利用できません。公式サイト https://ridoyjp.github.io/terafes_04/ を開いてください。";
+  }
+  if (error?.name === "AbortError") return "⚠️ AIの応答がタイムアウトしました。少し待ってからもう一度お試しください。";
+  if (error?.status === 403) return "⚠️ サイトの接続元(Origin)が許可されていません。公式GitHub Pagesサイトをご利用ください。";
+  if (error?.status === 429) return "⚠️ AIの利用上限に達しました。少し時間をおいてお試しください。";
+  if (error?.status === 502 || error?.status === 503 || error?.status === 504) return "⚠️ AIプロバイダーとの接続で問題が発生しました。管理者はCloudflare Workerログをご確認ください。";
+  if (error?.message === "AI_API_NOT_CONFIGURED") return "⚠️ AI APIのURLが設定されていません。config.jsを確認してください。";
+  return "⚠️ 現在AIサービスに接続できません。通信環境を確認してもう一度お試しください。";
+}
+
 // ---------- SEND MESSAGE ----------
 
-async function ask(question) {
+async function ask(question, spokenLanguage = "") {
   question = String(question || "").trim();
 
   if (!question || pendingChat) return;
 
   pendingChat = true;
+  // For typed input, Gemini follows the actual message language.
+  // For spoken input, use the chosen recognition locale.
+  const languageHint = spokenLanguage || detectWrittenLanguage(question);
+  lastQuestionLanguage = languageHint || detectWrittenLanguage(question) || (/[a-z]/i.test(question) ? "en-US" : deviceLanguage);
 
   add(question, true);
 
@@ -234,19 +264,11 @@ async function ask(question) {
   let result;
 
   try {
-    result = await getAIAnswer(question);
+    result = await getAIAnswer(question, languageHint);
 
   } catch (error) {
     console.error("Gemini AI Error:", error);
-
-    result = {
-      text:
-        "⚠️ 現在AIサービスに接続できません。\n" +
-        "しばらくしてからもう一度お試しください。\n\n" +
-        answer(question),
-
-      fallback: true
-    };
+    result = { text: explainAIError(error), fallback: true };
   } finally {
     typing.remove();
   }
@@ -269,7 +291,7 @@ async function ask(question) {
       chatHistory.splice(0, chatHistory.length - 12);
     }
 
-    speakAnswer(result.text);
+    speakAnswer(result.text, lastQuestionLanguage);
   }
 
   pendingChat = false;
@@ -447,7 +469,7 @@ if (!SpeechRecognitionAPI) {
 
     recognition = new SpeechRecognitionAPI();
 
-    recognition.lang = "ja-JP";
+    recognition.lang = requestedVoiceLanguage();
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
@@ -467,7 +489,7 @@ if (!SpeechRecognitionAPI) {
       if (transcript) {
         input.value = "";
         voiceMessage("");
-        ask(transcript);
+        ask(transcript, recognition.lang);
       }
     };
 
@@ -517,7 +539,7 @@ if (!SpeechRecognitionAPI) {
 
 // ---------- VOICE OUTPUT ----------
 
-function speakAnswer(text) {
+function speakAnswer(text, languageHint = "") {
   if (
     !soundEnabled ||
     !("speechSynthesis" in window)
@@ -534,15 +556,14 @@ function speakAnswer(text) {
 
   const utterance = new SpeechSynthesisUtterance(cleanText);
 
-  const isBangla = /[\u0980-\u09FF]/.test(cleanText);
-  const isJapanese =
-    /[\u3040-\u30FF\u3400-\u9FFF]/.test(cleanText);
-
-  utterance.lang = isBangla
-    ? "bn-BD"
-    : isJapanese
-      ? "ja-JP"
-      : "en-US";
+  // Prioritize the answer's actual script; otherwise use the selected voice language.
+  // Voice availability is determined by OS/browser installed voices.
+  const scriptLanguage = detectWrittenLanguage(cleanText);
+  utterance.lang = scriptLanguage || languageHint || (/^[\x00-\x7F\s\p{P}]+$/u.test(cleanText) ? "en-US" : deviceLanguage);
+  // Japanese kanji-only replies are ambiguous: preserve Japanese when requested.
+  if (scriptLanguage === "zh-CN" && (!languageHint || (languageHint || "").startsWith("ja"))) {
+    utterance.lang = "ja-JP";
+  }
 
   utterance.rate = 1;
   utterance.pitch = 1;
@@ -606,4 +627,134 @@ if (!("speechSynthesis" in window)) {
       String(soundEnabled)
     );
   });
+}
+
+
+// ---------- CONTINUOUS WELCOME NARRATION / ONE MUTE ICON ----------
+// Attempts playback immediately on load. Some browsers require a user gesture.
+// Repeats until muted or the user leaves the Welcome page.
+const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
+const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
+const WELCOME_SPEECH =
+  "こんにちは！TTC学園祭 AI Chat Botへようこそ！" +
+  "このアプリでは、学校の情報、学科、イベント、フード、会場案内などについて、AIに質問できます。" +
+  "文字でも音声でも質問できますので、ぜひ使ってみてください！" +
+  "スタートナウを押して始めましょう！";
+
+const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+let welcomeMuted = false;
+let welcomeUtterance = null;
+let welcomeSpeaking = false;
+let welcomeRepeatTimer = null;
+let welcomeAutoplayBlocked = false;
+
+function updateWelcomeButton() {
+  if (!welcomeVoiceButton) return;
+  welcomeVoiceButton.textContent = welcomeMuted ? "🔇" : "🔊";
+  welcomeVoiceButton.setAttribute("aria-pressed", String(welcomeMuted));
+  welcomeVoiceButton.setAttribute("aria-label", welcomeMuted ? "音声のミュートを解除" : "音声をミュート");
+  welcomeVoiceButton.title = welcomeMuted ? "音声をオンにする" : "音声をミュート";
+}
+
+function isWelcomeVisible() {
+  return !document.hidden && !document.getElementById("intro").hidden &&
+    !document.getElementById("chat").classList.contains("active");
+}
+
+function stopWelcomeSpeech() {
+  if (welcomeRepeatTimer !== null) {
+    clearTimeout(welcomeRepeatTimer);
+    welcomeRepeatTimer = null;
+  }
+  // Clear first to invalidate callbacks from a cancelled utterance.
+  welcomeUtterance = null;
+  welcomeSpeaking = false;
+  if (canSpeakWelcome) window.speechSynthesis.cancel();
+}
+
+function scheduleWelcomeRepeat() {
+  if (welcomeRepeatTimer !== null) clearTimeout(welcomeRepeatTimer);
+  if (welcomeMuted || !isWelcomeVisible()) return;
+  welcomeRepeatTimer = setTimeout(() => {
+    welcomeRepeatTimer = null;
+    playWelcomeSpeech();
+  }, 450);
+}
+
+function playWelcomeSpeech() {
+  if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible()) return;
+  stopWelcomeSpeech();
+  const synth = window.speechSynthesis;
+  const utterance = new SpeechSynthesisUtterance(WELCOME_SPEECH);
+  welcomeUtterance = utterance;
+  utterance.lang = "ja-JP";
+  utterance.rate = 0.95;
+  utterance.pitch = 1.05;
+  const japaneseVoice = synth.getVoices().find(v => v.lang.toLowerCase().startsWith("ja"));
+  if (japaneseVoice) utterance.voice = japaneseVoice;
+  utterance.onstart = () => {
+    if (welcomeUtterance !== utterance) return;
+    welcomeSpeaking = true;
+    welcomeAutoplayBlocked = false;
+    if (welcomeVoiceHint) welcomeVoiceHint.textContent = "音声ガイドを再生しています。";
+  };
+  utterance.onend = () => {
+    if (welcomeUtterance !== utterance) return;
+    welcomeUtterance = null;
+    welcomeSpeaking = false;
+    scheduleWelcomeRepeat();
+  };
+  utterance.onerror = (event) => {
+    if (welcomeUtterance !== utterance) return;
+    welcomeUtterance = null;
+    welcomeSpeaking = false;
+    if (event.error === "interrupted" || event.error === "canceled") return;
+    // Do not retry continuously on autoplay/voice failures.
+    welcomeAutoplayBlocked = true;
+    if (welcomeVoiceHint) welcomeVoiceHint.textContent = "音声が始まらない場合は画面をタップしてください。";
+  };
+  try {
+    synth.speak(utterance);
+  } catch (err) {
+    welcomeUtterance = null;
+    welcomeAutoplayBlocked = true;
+    if (welcomeVoiceHint) welcomeVoiceHint.textContent = "音声が始まらない場合は画面をタップしてください。";
+  }
+}
+
+if (welcomeVoiceButton) {
+  updateWelcomeButton();
+  if (!canSpeakWelcome) {
+    welcomeVoiceButton.disabled = true;
+    welcomeVoiceHint.textContent = "このブラウザーは音声読み上げに対応していません。";
+  } else {
+    welcomeVoiceButton.addEventListener("click", () => {
+      welcomeMuted = !welcomeMuted;
+      if (welcomeMuted) {
+        stopWelcomeSpeech();
+        if (welcomeVoiceHint) welcomeVoiceHint.textContent = "音声はミュートされています。";
+      } else {
+        playWelcomeSpeech();
+      }
+      updateWelcomeButton();
+    });
+
+    // Gesture fallback for browsers that block automatic spoken audio.
+    // Does not interfere with the mute icon or Start Now button.
+    const retryAfterGesture = (event) => {
+      if (event.target.closest?.("#welcomeVoiceButton, #startButton")) return;
+      if (!welcomeMuted && isWelcomeVisible() && !welcomeSpeaking &&
+          !window.speechSynthesis.speaking) playWelcomeSpeech();
+    };
+    document.getElementById("intro").addEventListener("pointerdown", retryAfterGesture);
+    document.getElementById("intro").addEventListener("keydown", retryAfterGesture);
+
+    window.addEventListener("load", () => {
+      if (isWelcomeVisible()) playWelcomeSpeech();
+    }, {once: true});
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopWelcomeSpeech();
+      else if (!welcomeMuted && isWelcomeVisible()) playWelcomeSpeech();
+    });
+  }
 }

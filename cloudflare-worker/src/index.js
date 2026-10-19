@@ -1,3 +1,5 @@
+import { SCHOOL_DATA } from "./school-data.js";
+
 
 /*
   TTC 学園祭 Chat Bot 2026
@@ -10,11 +12,14 @@ const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const MAX_MESSAGE = 1200;
 
 const SYSTEM_TEXT = `
-あなたは「TTC 学園祭 2026」の親切なAIチャットアシスタントです。
+あなたは「TTC 学園祭 2026」の親切な多言語AIアシスタントです。学校案内だけのボットではありません。
 
 【回答ルール】
-- 日本語で質問されたら日本語で答えてください。
-- 英語やベンガル語にも対応してください。
+- 学校以外の幅広い質問にも答えてください（知識、学習、数学、コード、翻訳、日常の質問など）。
+- ユーザーの最新の質問で使われた言語と同じ言語で返答してください。日本語は日本語、বাংলা は বাংলা、English は English、ほかの言語も可能な範囲で対応してください。
+- 入力が音声認識経由で、明示的な responseLanguage が渡されている場合、その言語を優先してください。
+- 言語が不明なら質問の文脈または直近のやり取りに合わせてください。
+- すべての言語・音声に完全対応していると断言しないでください。
 - 学園祭以外にも、プログラミング、勉強、翻訳、
   一般知識などの質問に答えてください。
 - わかりやすく、親切に説明してください。
@@ -29,7 +34,26 @@ const SYSTEM_TEXT = `
 確認するよう案内してください。
 
 回答は基本的に簡潔にしてください。
+東京テクニカルカレッジについては追加された学校確認資料を優先し、学園祭の未確認事項を作り話で埋めないでください。
+公式情報は更新されることがあります。重要な場合は学校公式サイトでの再確認を案内してください。
 `;
+
+function getRelevantSchoolData(message, history) {
+  const query = [message, ...history.filter(x=>x?.role==='user').slice(-1).map(x=>x.text||'')].join(' ').toLowerCase();
+  const schoolWords = /学校|専門|ttc|テクニカル|school|college|学園|入学|学費|留学生|奨学|就職|資格|オープンキャンパス|建築|インテリア|バイオ|情報処理|キャンパス|東中野|中野|住所|アクセス|施設|学科|学園祭|祭り|文化祭|ステージ|フード|屋台|ブース|会場|トイレ|স্কুল|কলেজ|উৎসব|ভর্তি|ফি|ক্যাম্পাস|school festival|festival|admission|tuition|course|department/i;
+  if (!schoolWords.test(query)) return '';
+  const scored = SCHOOL_DATA.entries.map(e=>({e,score:e.keywords.reduce((a,k)=>a+(query.includes(k.toLowerCase())? (k.length>2?3:1):0),0)}));
+  scored.sort((a,b)=>b.score-a.score);
+  const selected = scored.filter(x=>x.score>0).slice(0,6).map(x=>x.e);
+  // Always include the top-level school contact/overview for broad "school" questions.
+  if (!selected.length || /^(学校|学校について|school|ttc|কলেজ|স্কুল|東京テクニカルカレッジ)/i.test(message.trim())) {
+    for (const topic of ['概要・歴史','所在地・アクセス','電話・相談窓口']) {
+      const e=SCHOOL_DATA.entries.find(e=>e.topic===topic);
+      if(e && !selected.includes(e)) selected.push(e);
+    }
+  }
+  return '【学校確認資料（2026-10-19時点）】\n'+selected.slice(0,9).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source||'未提供（学園祭担当教員に確認）'}`).join('\n\n');
+}
 
 function corsHeaders(origin) {
   return {
@@ -132,6 +156,13 @@ export default {
       ? data.history.slice(-10)
       : [];
 
+    const allowedLocales = new Set(["bn-BD","en-US","ja-JP","hi-IN","ur-PK","ar-SA","es-ES","fr-FR","de-DE","pt-BR","zh-CN","ko-KR","id-ID","th-TH","vi-VN","si-LK"]);
+    const responseLanguage = typeof data.responseLanguage === "string" && allowedLocales.has(data.responseLanguage)
+      ? data.responseLanguage : "";
+    const languageRule = responseLanguage
+      ? `\n【今回の回答言語】${responseLanguage}。可能な限り、この言語で自然に返答してください。`
+      : "\n【今回の回答言語】最新のユーザー質問と同じ言語で返答してください。";
+
     const contents = [];
 
     for (const entry of history) {
@@ -180,7 +211,7 @@ export default {
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{ text: SYSTEM_TEXT }]
+            parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getRelevantSchoolData(message, history) }]
           },
           contents,
           generationConfig: {

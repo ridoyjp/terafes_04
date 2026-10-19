@@ -38,6 +38,8 @@
     <h1>AI Chat Bot</h1>
     <p>学園祭をもっと楽しく。気になる情報をAIチャットで簡単にチェック！</p>
     <button class="start" id="startButton" type="button">Start Now →</button>
+    <button class="welcome-voice-btn" id="welcomeVoiceButton" type="button" aria-label="音声をミュート" aria-pressed="false" title="音声をミュート">🔊</button>
+    <p class="welcome-voice-hint" id="welcomeVoiceHint" aria-live="polite">音声ガイドはミュートするまで繰り返し再生します。</p>
     <div class="intro-features" aria-label="おすすめ機能">
       <span>✦ おすすめ</span><span>⌁ フード</span><span>✧ イベント</span>
     </div>
@@ -99,12 +101,34 @@
       <div class="messages" id="messages" role="log" aria-label="チャット履歴" aria-live="polite" aria-relevant="additions">
         <div class="row">
           <span class="avatar bot-icon"><img alt="Chatbot" src="assets/robot-logo.png"></span>
-          <div class="bubble">こんにちは！TTC 学園祭 2026へようこそ 🎉
-食べ物・ゲーム・ステージ・場所について聞いてください！
-その他の質問にもAIがお答えします。</div>
+          <div class="bubble">こんにちは！TTC 学園祭 AI Chat Botへようこそ！🌏
+学校のことだけでなく、勉強・プログラミング・一般知識など、さまざまな質問ができます。
+বাংলা / English / 日本語など、質問した言語で回答します。🎙️音声入力は言語を選んでください。</div>
         </div>
       </div>
 
+      <div class="language-toolbar">
+        <label for="voiceLanguage">🌐 音声入力の言語 / Voice language</label>
+        <select id="voiceLanguage" aria-label="Voice input language">
+          <option value="auto">Auto (device language)</option>
+          <option value="bn-BD">বাংলা (Bengali)</option>
+          <option value="en-US">English</option>
+          <option value="ja-JP">日本語 (Japanese)</option>
+          <option value="hi-IN">हिन्दी (Hindi)</option>
+          <option value="ur-PK">اردو (Urdu)</option>
+          <option value="ar-SA">العربية (Arabic)</option>
+          <option value="es-ES">Español (Spanish)</option>
+          <option value="fr-FR">Français (French)</option>
+          <option value="de-DE">Deutsch (German)</option>
+          <option value="pt-BR">Português</option>
+          <option value="zh-CN">中文 (Chinese)</option>
+          <option value="ko-KR">한국어 (Korean)</option>
+          <option value="id-ID">Bahasa Indonesia</option>
+          <option value="th-TH">ไทย (Thai)</option>
+          <option value="vi-VN">Tiếng Việt</option>
+          <option value="si-LK">සිංහල (Sinhala)</option>
+        </select>
+      </div>
       <form class="composer" id="form">
         <input aria-label="メッセージ" autocomplete="off" id="input" placeholder="メッセージを入力..." maxlength="1200" required>
         <button id="micButton" class="voice-control" type="button" aria-label="音声で質問" title="音声で質問" aria-pressed="false">🎙️</button>
