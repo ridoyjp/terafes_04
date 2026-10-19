@@ -640,11 +640,11 @@ if (!("speechSynthesis" in window)) {
 // Repeats until muted or the user leaves the Welcome page.
 const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
-const WELCOME_SPEECH =
-  "こんにちは！TTC学園祭 AI Chat Botへようこそ！" +
-  "このアプリでは、学校の情報、学科、イベント、フード、会場案内などについて、AIに質問できます。" +
-  "文字でも音声でも質問できますので、ぜひ使ってみてください！" +
-  "スタートナウを押して始めましょう！";
+const WELCOME_SPEECH = "こんにちは！TTC 学園祭 AI Chat Botへようこそ！🌏🤖" +
+  "学校のことだけでなく、勉強・プログラミング・一般知識など、さまざまな質問ができます。" +
+  "日本語を基本言語とし、世界中のさまざまな言語に対応しています。🌍" +
+  "質問した言語でAIが回答します。🎙️ 音声入力はご希望の言語を選択してください。" +
+  "ぜひお気軽に使ってみてください！✨";
 
 const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 let welcomeMuted = false;
