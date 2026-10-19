@@ -43,6 +43,7 @@ function openChat() {
 }
 
 function closeChat() {
+  stopFastJapaneseRecognition();
   cancelRecording();
   window.speechSynthesis?.cancel();
   voiceMessage("");
@@ -431,7 +432,79 @@ document.querySelectorAll("[data-q]").forEach(button => {
 const micButton = document.getElementById("micButton");
 const soundButton = document.getElementById("soundButton");
 const voiceStatus = document.getElementById("voiceStatus");
-let recognition = null; // Kept for existing navigation cleanup.
+let recognition = null;
+let japaneseFastSession = 0;
+let japaneseFastSucceeded = false;
+let japaneseFastStartedAt = 0;
+const BrowserSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Japanese-first: enable browser STT when the device language is Japanese.
+// Non-Japanese browsers keep Gemini multilingual auto-detection for accuracy.
+const JAPANESE_FIRST = /^ja(?:-|$)/i.test(deviceLanguage);
+function stopFastJapaneseRecognition() {
+  const current = recognition;
+  recognition = null;
+  if (current) {
+    current.onresult = null;
+    current.onerror = null;
+    current.onend = null;
+    try { current.abort(); } catch (_) {}
+  }
+}
+// The browser can provide Japanese text sooner than uploading a recording.
+// A simultaneous short MediaRecorder clip remains a fallback when browser STT
+// is unavailable, gives no text, or fails. No duplicate messages are sent.
+function startFastJapaneseRecognition() {
+  stopFastJapaneseRecognition();
+  if (!JAPANESE_FIRST || !BrowserSpeechRecognition || pendingChat) return;
+  const session = ++japaneseFastSession;
+  japaneseFastStartedAt = performance.now();
+  japaneseFastSucceeded = false;
+  try {
+    const r = new BrowserSpeechRecognition();
+    recognition = r;
+    r.lang = 'ja-JP';
+    r.interimResults = true;
+    r.continuous = false;
+    r.maxAlternatives = 1;
+    r.onresult = event => {
+      if (session !== japaneseFastSession || japaneseFastSucceeded) return;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const item = event.results[i];
+        if (!item.isFinal) continue;
+        const transcript = String(item[0]?.transcript || '').trim();
+        if (!transcript || pendingChat) return;
+        japaneseFastSucceeded = true;
+        console.info('[Voice timing] Japanese browser STT:', Math.round(performance.now() - japaneseFastStartedAt), 'ms');
+        // Stop and discard the backup clip; Gemini transcription must NOT run.
+        autoSendRecording = false;
+        cancelRecording();
+        stopFastJapaneseRecognition();
+        const question = (input.value.trim() ? input.value.trim() + ' ' : '') + transcript;
+        input.value = '';
+        voiceMessage('✅ 日本語を認識しました。質問を送信しています…');
+        if (document.getElementById('chat').classList.contains('active')) void ask(question, 'ja-JP');
+        else input.value = question;
+        return;
+      }
+    };
+    r.onerror = e => {
+      console.info('[Voice] Japanese browser recognition fallback:', e?.error);
+      if (session === japaneseFastSession) stopFastJapaneseRecognition();
+      // Existing MediaRecorder continues; its Gemini path automatically runs.
+    };
+    r.onend = () => {
+      if (session === japaneseFastSession && !japaneseFastSucceeded) {
+        stopFastJapaneseRecognition();
+        // Let the backup microphone silence detector finish the clip normally.
+      }
+    };
+    r.start();
+    voiceMessage('🎙️ 日本語を認識しています…');
+  } catch (e) {
+    console.info('[Voice] Browser recognition unavailable; Gemini fallback', e?.name);
+    stopFastJapaneseRecognition();
+  }
+}
 let soundEnabled = true;
 let recorder = null;
 let recordingStream = null;
@@ -578,6 +651,7 @@ async function processRecording(blob) {
   if (!TRANSCRIBE_API_URL || !/^https:\/\//.test(TRANSCRIBE_API_URL)) {
     nativeDictation("⚠️ AI音声認識のURLがありません。キーボードのマイクを使用してください。"); return;
   }
+  if (japaneseFastSucceeded) return;
   voiceMessage("🌍 言語を自動判定して文字に変換しています…");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -611,6 +685,7 @@ async function processRecording(blob) {
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
     const transcript = String(result.transcript || "").trim();
     console.info("[Voice timing] transcription total:", Math.round(performance.now() - transcriptionStartedAt), "ms, audio bytes:", blob.size);
+    if (japaneseFastSucceeded) return;
     if (!transcript) throw new Error("音声を認識できませんでした。もう一度お試しください。");
     const question = (input.value.trim() ? input.value.trim() + " " : "") + transcript;
     input.value = "";
@@ -657,6 +732,7 @@ async function startRecording() {
     window.speechSynthesis?.cancel();
     voiceMessage("🎙️ マイクの許可を求めています…");
     recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+    if (japaneseFastSucceeded) { stopMicrophoneTracks(); recordingBusy = false; return; }
     const preferred = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"];
     const mimeType = preferred.find(type => MediaRecorder.isTypeSupported(type));
     // Low-bitrate mono voice is sufficient for speech and smaller on mobile networks.
@@ -676,7 +752,15 @@ async function startRecording() {
       const audioBlob = new Blob(recordingChunks, { type: recorder.mimeType || mimeType || "audio/webm" });
       recordingChunks = [];
       stopMicrophoneTracks();
-      processRecording(audioBlob);
+      if (!japaneseFastSucceeded) {
+        if (recognition && JAPANESE_FIRST) {
+          const active = recognition;
+          try { active.stop(); } catch (_) {}
+          setTimeout(() => {
+            if (!japaneseFastSucceeded) { stopFastJapaneseRecognition(); void processRecording(audioBlob); }
+          }, 450);
+        } else void processRecording(audioBlob);
+      }
     };
     recorder.start();
     recordingStartedAt = performance.now();
@@ -698,9 +782,15 @@ async function startRecording() {
 if (micButton) {
   micButton.disabled = false;
   micButton.addEventListener("click", () => {
-    if (recorder?.state === "recording") stopRecording(); // Optional manual stop.
-    else {
+    if (recorder?.state === "recording") {
+      stopFastJapaneseRecognition();
+      stopRecording(); // Optional manual stop.
+    } else {
+      japaneseFastSucceeded = false;
       unlockAudioFromTap();
+      // Browser STT starts within the original user gesture where possible.
+      // A recorded Gemini path is also prepared for automatic fallback.
+      startFastJapaneseRecognition();
       startRecording();
     }
   });
