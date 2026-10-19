@@ -105,60 +105,6 @@ export default {
       });
     }
 
-    // Multilingual speech-to-text: audio is processed in memory, not stored.
-    if (url.pathname === "/transcribe") {
-      if (!allowed) return json({ error: "Origin not allowed" }, 403, headers);
-      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, headers);
-      if (!env.GEMINI_API_KEY) return json({ error: "Gemini API Key is not configured" }, 503, headers);
-      // Base64 audio payload max ~2.1 MB; request body limit includes JSON overhead.
-      if (Number(request.headers.get("Content-Length") || 0) > 3_000_000) {
-        return json({ error: "Recording too large" }, 413, headers);
-      }
-      let voiceData;
-      try {
-        const body = await request.text();
-        if (body.length > 3_000_000) return json({ error: "Recording too large" }, 413, headers);
-        voiceData = JSON.parse(body);
-      } catch { return json({ error: "Invalid audio request" }, 400, headers); }
-      const audio = voiceData?.audio;
-      const mimeType = voiceData?.mimeType;
-      const allowedTypes = ["audio/webm", "audio/mp4", "audio/ogg", "audio/wav", "audio/mpeg"];
-      const cleanedType = typeof mimeType === "string" ? mimeType.split(";")[0].toLowerCase() : "";
-      if (!allowedTypes.includes(cleanedType) || typeof audio !== "string" || audio.length < 100 || audio.length > 2_900_000 || !/^[a-zA-Z0-9+/=]+$/.test(audio)) {
-        return json({ error: "Invalid audio data or audio type" }, 400, headers);
-      }
-      const model = String(env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash").trim();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 28000);
-      try {
-        const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [
-                { text: "Transcribe the spoken audio exactly in the ORIGINAL spoken language and ORIGINAL writing system. Automatically identify language from the audio, including Bengali, Japanese, English, Nepali, Burmese, Chinese, Hindi and other languages. Do not translate or answer the speech. Return only the transcript, without explanations or labels. If silent/unintelligible, return an empty response." },
-                { inlineData: { mimeType: cleanedType, data: audio } }
-              ] }],
-              generationConfig: { temperature: 0, maxOutputTokens: 1400 }
-            }),
-            signal: controller.signal
-          }
-        );
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          console.error("Gemini transcription error", { status: response.status, providerStatus: result?.error?.status, providerMessage: String(result?.error?.message || "").slice(0, 250) });
-          return json({ error: response.status === 429 ? "Voice AI usage limit reached" : "Voice transcription service unavailable" }, response.status === 429 ? 429 : 502, headers);
-        }
-        const transcript = (result.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
-        return json({ transcript: transcript.slice(0, 1500) }, 200, headers);
-      } catch (error) {
-        console.error("Voice transcription request failed", error?.name);
-        return json({ error: "Voice recognition timed out" }, 504, headers);
-      } finally { clearTimeout(timer); }
-    }
-
     if (url.pathname !== "/chat") {
       return json({ error: "Not found" }, 404, headers);
     }
