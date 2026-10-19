@@ -436,7 +436,7 @@ let recordingStream = null;
 let recordingChunks = [];
 let recordingTimer = null;
 let recordingBusy = false;
-const MAX_RECORD_MS = 18000;
+const MAX_RECORD_MS = 12000; // Shorter recordings are more reliable on mobile networks.
 const MAX_AUDIO_BYTES = 2_100_000;
 const TRANSCRIBE_API_URL = CHAT_API_URL.replace(/\/chat(?:\?.*)?$/, "/transcribe");
 
@@ -474,7 +474,7 @@ async function toBase64(blob) {
 }
 async function processRecording(blob) {
   if (!blob.size) { voiceMessage("⚠️ 音声が録音されませんでした。もう一度お試しください。"); return; }
-  if (blob.size > MAX_AUDIO_BYTES) { voiceMessage("⚠️ 音声が長すぎます。18秒以内でお話しください。"); return; }
+  if (blob.size > MAX_AUDIO_BYTES) { voiceMessage("⚠️ 音声が長すぎます。12秒以内でお話しください。"); return; }
   if (!TRANSCRIBE_API_URL || !/^https:\/\//.test(TRANSCRIBE_API_URL)) {
     nativeDictation("⚠️ AI音声認識のURLがありません。キーボードのマイクを使用してください。"); return;
   }
@@ -483,12 +483,29 @@ async function processRecording(blob) {
   const timeout = setTimeout(() => controller.abort(), 35000);
   try {
     const audio = await toBase64(blob);
-    const response = await fetch(TRANSCRIBE_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audio, mimeType: blob.type || "audio/webm" }),
-      signal: controller.signal
-    });
+    // Report exact endpoint and network problems without exposing audio or API keys.
+    // A browser TypeError/Failed to fetch means the request did not provide an HTTP response.
+    const payload = JSON.stringify({ audio, mimeType: blob.type || "audio/webm" });
+    let response;
+    try {
+      response = await fetch(TRANSCRIBE_API_URL, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: controller.signal
+      });
+    } catch (networkError) {
+      // A single retry helps with brief mobile handoffs. Never repeat an HTTP error.
+      if (networkError?.name === "AbortError") throw networkError;
+      await new Promise(resolve => setTimeout(resolve, 600));
+      response = await fetch(TRANSCRIBE_API_URL, {
+        method: "POST", mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: controller.signal
+      });
+    }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
     const transcript = String(result.transcript || "").trim();
@@ -498,7 +515,13 @@ async function processRecording(blob) {
     input.focus(); // Do not automatically send; visitor can review the transcription.
   } catch (err) {
     console.warn("Multilingual transcription failed", err?.message);
-    voiceMessage("⚠️ 音声認識できませんでした: " + (err?.name === "AbortError" ? "タイムアウト" : err?.message || "接続エラー") + "。キーボードのマイクも利用できます。");
+    const isNetworkError = err instanceof TypeError || /Failed to fetch|NetworkError|Load failed/i.test(String(err?.message || ""));
+    const explanation = err?.name === "AbortError"
+      ? "通信がタイムアウトしました。短く録音して再試行してください。"
+      : isNetworkError
+        ? "サーバーに接続できません。通信環境・ブラウザーの通信制限を確認し、ページを更新してください。"
+        : String(err?.message || "接続エラー");
+    voiceMessage("⚠️ 音声認識エラー: " + explanation + " キーボードのマイクも利用できます。");
   } finally {
     clearTimeout(timeout);
     recordingBusy = false;
@@ -537,7 +560,7 @@ async function startRecording() {
     };
     recorder.start();
     setListening(true);
-    voiceMessage("🎙️ 聞いています… 言語を選ばずに話してください。もう一度🎙️を押すと文字に変換します（最大18秒）。");
+    voiceMessage("🎙️ 聞いています… 言語を選ばずに話してください。もう一度🎙️を押すと文字に変換します（最大12秒）。");
     recordingTimer = setTimeout(stopRecording, MAX_RECORD_MS);
   } catch (err) {
     stopMicrophoneTracks(); recordingBusy = false;
