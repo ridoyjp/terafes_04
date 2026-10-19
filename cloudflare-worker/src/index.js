@@ -127,7 +127,7 @@ export default {
       if (!allowedTypes.includes(cleanedType) || typeof audio !== "string" || audio.length < 100 || audio.length > 2_900_000 || !/^[a-zA-Z0-9+/=]+$/.test(audio)) {
         return json({ error: "Invalid audio data or audio type" }, 400, headers);
       }
-      const model = String(env.GEMINI_AUDIO_MODEL || "gemini-2.5-flash").trim();
+      const model = String(env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash").trim();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 28000);
       try {
