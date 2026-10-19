@@ -835,51 +835,71 @@ if ("speechSynthesis" in window) {
   window.speechSynthesis.addEventListener?.("voiceschanged", getPinnedJapaneseVoice);
 }
 
+// Reply-only: select a natural available voice matching the answer language.
+// No network calls are added, and the welcome narration remains unchanged.
+function pickReplyVoice(voices, locale) {
+  const wanted = String(locale || "en-US").toLowerCase();
+  const primary = wanted.split("-")[0];
+  const matches = voices.filter(v => String(v.lang || "").toLowerCase().split("-")[0] === primary);
+  if (!matches.length) return null;
+  return matches.sort((a, b) => {
+    const score = v => {
+      const name = String(v.name || "").toLowerCase();
+      let n = 0;
+      if (String(v.lang).toLowerCase() === wanted) n += 12;
+      if (/natural|neural|enhanced|premium|high quality/.test(name)) n += 8;
+      if (v.localService) n += 3;
+      if (v.default) n += 1;
+      return n;
+    };
+    return score(b) - score(a);
+  })[0];
+}
+
 function speakAnswer(text, languageHint = "") {
-  if (
-    !soundEnabled ||
-    !("speechSynthesis" in window)
-  ) return;
+  if (!soundEnabled || !("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+  const synth = window.speechSynthesis;
+  synth.cancel();
 
-  window.speechSynthesis.cancel();
-
-  const cleanText = text
+  const cleanText = String(text || "")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, "")
     .replace(/[🎉🍜🎮🎤🗺️🕒😊]/gu, "")
-    .replace(/[*#`]/g, "")
+    .replace(/[*#`_]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
-
   if (!cleanText) return;
 
   const utterance = new SpeechSynthesisUtterance(cleanText);
+  const written = detectWrittenLanguage(cleanText);
+  // Honor question language, especially Japanese Romaji -> Japanese reply.
+  // Only correct clearly incompatible scripts for the voice output.
+  let locale = languageHint || written || "en-US";
+  if (/[\u0980-\u09ff]/u.test(cleanText) && !locale.startsWith("bn")) locale = "bn-BD";
+  else if (/[\u1000-\u109f]/u.test(cleanText)) locale = "my-MM";
+  else if (/[\u1100-\u11ff\uac00-\ud7af]/u.test(cleanText)) locale = "ko-KR";
+  else if (/[\u0900-\u097f]/u.test(cleanText) && !/^(hi|ne|mr)/i.test(locale)) locale = "hi-IN";
+  else if (/[\u3040-\u30ff]/u.test(cleanText)) locale = "ja-JP";
+  utterance.lang = locale;
 
-  // The user's QUESTION language is authoritative: never switch to Japanese
-  // just because school names or a Japanese fragment appear in the answer.
-  utterance.lang = languageHint || detectWrittenLanguage(cleanText) || "en-US";
+  const isJapanese = locale.toLowerCase().startsWith("ja");
+  utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 0.97;
+  utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1.0;
+  utterance.volume = 1;
 
-  const isJapanese = utterance.lang.toLowerCase().startsWith("ja");
-  utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 1;
-  utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1;
+  const voices = synth.getVoices();
+  const voice = isJapanese ? getPinnedJapaneseVoice() : pickReplyVoice(voices, locale);
+  if (voice) utterance.voice = voice;
 
-  const voices = window.speechSynthesis.getVoices();
-  const locale = utterance.lang.toLowerCase();
-  const primaryLanguage = locale.split("-")[0];
-  const voice = isJapanese ? getPinnedJapaneseVoice() : (
-    voices.find(v => v.lang.toLowerCase() === locale) ||
-    voices.find(v => v.lang.toLowerCase().split("-")[0] === primaryLanguage)
-  );
-
-  if (voice) {
-    utterance.voice = voice;
-  }
-
-  // Do not silently choose a Japanese/English voice for Bengali or another
-  // language when no suitable device voice exists.
-  if (!voice && voices.length && primaryLanguage !== "en") {
-    console.warn("Voice unavailable for", utterance.lang, "— install a matching device/browser voice.");
+  // Never use an unrelated language voice; it produces confusing pronunciation.
+  if (!voice && voices.length) {
+    console.warn("No matching reply voice installed for", locale);
     voiceMessage("🔇 この端末には回答言語の音声がありません。端末の音声を追加してください。");
     return;
   }
-  window.speechSynthesis.speak(utterance);
+  // Some browsers populate the voice list asynchronously. Use the normal
+  // locale-based browser voice immediately rather than slowing down replies.
+  synth.speak(utterance);
 }
 
 // ---------- SOUND TOGGLE ----------
