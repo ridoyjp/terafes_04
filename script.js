@@ -207,6 +207,7 @@ async function getAIAnswer(question, languageHint = "") {
   }
 
   const controller = new AbortController();
+  const chatStartedAt = performance.now();
   const timeout = setTimeout(() => controller.abort(), 45000);
   try {
     const response = await fetch(CHAT_API_URL, {
@@ -230,6 +231,7 @@ async function getAIAnswer(question, languageHint = "") {
     if (typeof data.reply !== "string" || !data.reply.trim()) {
       throw new Error("EMPTY_AI_REPLY");
     }
+    console.info("[Voice timing] chat response:", Math.round(performance.now() - chatStartedAt), "ms");
     return { text: data.reply.trim().slice(0, 5000), fallback: false };
   } finally {
     clearTimeout(timeout);
@@ -437,13 +439,14 @@ let recordingChunks = [];
 let recordingTimer = null;
 let silenceMonitor = null;
 let audioContext = null;
-let lastAudioSignalAt = 0;
 let voiceStartedAt = 0;
+let lastAudioSignalAt = 0;
 let autoSendRecording = true;
 let recordingBusy = false;
+let recordingStartedAt = 0;
 const IS_MOBILE_VOICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 900);
-const MAX_RECORD_MS = IS_MOBILE_VOICE ? 10000 : 12000; // Short mobile clips reduce upload time.
-const SILENCE_MS = IS_MOBILE_VOICE ? 700 : 800; // 0.7s mobile / 0.8s desktop; brief pauses can cut speech.
+const MAX_RECORD_MS = IS_MOBILE_VOICE ? 8500 : 11000;
+const SILENCE_MS = IS_MOBILE_VOICE ? 900 : 900; // Avoid cutting natural word pauses.
 const MAX_AUDIO_BYTES = 2_100_000;
 const TRANSCRIBE_API_URL = CHAT_API_URL.replace(/\/chat(?:\?.*)?$/, "/transcribe");
 
@@ -457,68 +460,85 @@ function setListening(active) {
   micButton.classList.toggle("is-listening", active);
   micButton.setAttribute("aria-pressed", String(active));
   micButton.textContent = active ? "⏹" : "🎙️";
-  micButton.title = active ? "手動で録音終了（通常は短い無音で自動送信）" : "一度押して話す：無音約0.7秒で自動送信";
+  micButton.title = active ? "録音中（無音で自動終了、タップでも終了）" : "一度タップして話す：無音で自動送信";
   micButton.setAttribute("aria-label", micButton.title);
 }
 function stopSilenceDetection() {
   if (silenceMonitor) clearInterval(silenceMonitor);
   silenceMonitor = null;
-  // Close the analysis context as well as the microphone tracks.
   if (audioContext) {
     const context = audioContext;
     audioContext = null;
-    context.close().catch(() => {});
+    try { const closing = context.close(); closing?.catch?.(() => {}); } catch (_) {}
   }
 }
+// Safari sometimes requires the audio engine to be created and resumed *inside*
+// the real tap event, before the asynchronous getUserMedia permission prompt.
+function unlockAudioFromTap() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  if (!audioContext || audioContext.state === "closed") {
+    try { audioContext = new AC(); } catch (e) { console.warn("AudioContext unavailable", e?.name); return; }
+  }
+  try { const p = audioContext.resume(); p?.catch?.(() => {}); } catch (_) {}
+}
 function startSilenceDetection(stream) {
-  // MediaRecorder is still the source of the recording. Web Audio only measures
-  // amplitude locally; it does NOT attempt language recognition.
-  const AudioContextAPI = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextAPI) return; // Manual stop / 12-second safety timer remains.
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) {
+    voiceMessage("🎙️ 録音中… 自動終了できない場合は停止を押してください。");
+    return;
+  }
   try {
-    audioContext = new AudioContextAPI();
-    const source = audioContext.createMediaStreamSource(stream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
+    if (!audioContext || audioContext.state === "closed") audioContext = new AC();
+    const context = audioContext;
+    try { context.resume()?.catch?.(() => {}); } catch (_) {}
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser); // No connection to speakers: avoids echo.
     const samples = new Float32Array(analyser.fftSize);
-    let candidateSpeechMs = 0;
-    let noiseFloor = 0.004;
-    let samplesCount = 0;
-    const startTime = performance.now();
-    lastAudioSignalAt = 0;
+    let speechFrames = 0;
+    let noiseFloor = 0.003;
+    let validFrames = 0;
+    let resumeAttempts = 0;
     voiceStartedAt = 0;
+    lastAudioSignalAt = 0;
     silenceMonitor = setInterval(() => {
-      if (!recorder || recorder.state !== "recording" || !audioContext) return;
+      if (!recorder || recorder.state !== "recording" || audioContext !== context) return;
+      const now = performance.now();
+      if (context.state !== "running") {
+        if (++resumeAttempts <= 5) {
+          try { context.resume()?.catch?.(() => {}); } catch (_) {}
+        }
+        return; // Safety timer always stops recording if Safari blocks analysis.
+      }
       analyser.getFloatTimeDomainData(samples);
       let sum = 0;
-      for (const sample of samples) sum += sample * sample;
+      for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
       const rms = Math.sqrt(sum / samples.length);
-      const now = performance.now();
-      // Estimate room noise before the first detected speech. Adapt slowly.
-      if (!voiceStartedAt && samplesCount < 8) {
-        noiseFloor = (noiseFloor * 0.7) + (Math.min(rms, 0.025) * 0.3);
-        samplesCount++;
-      }
-      const threshold = Math.max(0.009, noiseFloor * 2.8);
+      if (!Number.isFinite(rms)) return;
+      validFrames++;
+      // Calibrate from quiet samples and adjust to different phone microphones.
+      if (!voiceStartedAt && rms < 0.03) noiseFloor = noiseFloor * 0.90 + rms * 0.10;
+      const threshold = Math.max(0.0055, Math.min(0.03, noiseFloor * 2.2));
       if (rms > threshold) {
-        candidateSpeechMs += 100;
+        speechFrames++;
         lastAudioSignalAt = now;
-        if (!voiceStartedAt && candidateSpeechMs >= 250) {
+        if (!voiceStartedAt && speechFrames >= 2) {
           voiceStartedAt = now;
-          voiceMessage("🎙️ 聞き取り中… 話し終えて約0.7〜0.8秒で録音を終了し、自動送信します。");
+          voiceMessage("🎙️ 聞き取り中… 話し終えたら自動送信します。");
         }
       } else {
-        candidateSpeechMs = 0;
+        speechFrames = 0;
       }
       if (voiceStartedAt && now - lastAudioSignalAt >= SILENCE_MS) {
+        console.info("[Voice timing] automatic silence stop", Math.round(now - recordingStartedAt), "ms");
         stopRecording();
-      } else if (!voiceStartedAt && now - startTime >= MAX_RECORD_MS - 250) {
-        voiceMessage("⚠️ 音声が検出できませんでした。もう一度お試しください。");
       }
+      if (validFrames === 1) console.info("[Voice] audio analysis active on", navigator.userAgent);
     }, 100);
   } catch (error) {
-    console.warn("Silence detector unavailable; manual stop still works", error?.name);
+    console.warn("Silence detector unavailable; safety auto-stop remains", error?.name);
     stopSilenceDetection();
   }
 }
@@ -554,7 +574,7 @@ async function toBase64(blob) {
 }
 async function processRecording(blob) {
   if (!blob.size) { voiceMessage("⚠️ 音声が録音されませんでした。もう一度お試しください。"); return; }
-  if (blob.size > MAX_AUDIO_BYTES) { voiceMessage("⚠️ 音声が長すぎます。12秒以内でお話しください。"); return; }
+  if (blob.size > MAX_AUDIO_BYTES) { voiceMessage("⚠️ 音声が長すぎます。短くお話しください。"); return; }
   if (!TRANSCRIBE_API_URL || !/^https:\/\//.test(TRANSCRIBE_API_URL)) {
     nativeDictation("⚠️ AI音声認識のURLがありません。キーボードのマイクを使用してください。"); return;
   }
@@ -577,7 +597,7 @@ async function processRecording(blob) {
         signal: controller.signal
       });
     } catch (networkError) {
-      // A single retry helps with brief mobile handoffs. Never repeat an HTTP error.
+      // Retry once only for transient mobile network failure, never an HTTP error.
       if (networkError?.name === "AbortError") throw networkError;
       await new Promise(resolve => setTimeout(resolve, 600));
       response = await fetch(TRANSCRIBE_API_URL, {
@@ -600,7 +620,7 @@ async function processRecording(blob) {
     if (autoSendRecording && !document.getElementById("chat").classList.contains("active")) {
       input.value = question; // Never send when the visitor has left the chat.
     } else if (autoSendRecording) {
-      await ask(question);
+      void ask(question);
     } else {
       input.value = question;
     }
@@ -659,10 +679,15 @@ async function startRecording() {
       processRecording(audioBlob);
     };
     recorder.start();
+    recordingStartedAt = performance.now();
     setListening(true);
     voiceMessage(`🎙️ 話してください。約${SILENCE_MS / 1000}秒の無音で録音終了（最大${MAX_RECORD_MS / 1000}秒）。`);
     startSilenceDetection(recordingStream);
-    recordingTimer = setTimeout(stopRecording, MAX_RECORD_MS);
+    // Guaranteed upper bound even if iOS suspends Web Audio analysis.
+    recordingTimer = setTimeout(() => {
+      console.info("[Voice timing] safety auto-stop", MAX_RECORD_MS, "ms");
+      stopRecording();
+    }, MAX_RECORD_MS);
   } catch (err) {
     stopMicrophoneTracks(); recordingBusy = false;
     voiceMessage(err?.name === "NotAllowedError" ?
@@ -674,7 +699,10 @@ if (micButton) {
   micButton.disabled = false;
   micButton.addEventListener("click", () => {
     if (recorder?.state === "recording") stopRecording(); // Optional manual stop.
-    else startRecording();
+    else {
+      unlockAudioFromTap();
+      startRecording();
+    }
   });
 }
 // ---------- VOICE OUTPUT ----------
