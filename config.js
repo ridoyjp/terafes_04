@@ -1,4 +1,2 @@
-
-window.GAKUEN_CHAT_CONFIG = {
-  apiUrl: "https://gakuen-chatbot-ai.ridoy-gakuen-ai.workers.dev/chat"
-};
+// Insert your already deployed Cloudflare Worker PUBLIC URL here. Never put a Gemini API key in this file.
+window.CHATBOT_WORKER_URL = "";
