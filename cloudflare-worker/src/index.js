@@ -159,9 +159,26 @@ export default {
     const allowedLocales = new Set(["bn-BD","en-US","ja-JP","hi-IN","ur-PK","ar-SA","es-ES","fr-FR","de-DE","pt-BR","zh-CN","ko-KR","id-ID","th-TH","vi-VN","si-LK"]);
     const responseLanguage = typeof data.responseLanguage === "string" && allowedLocales.has(data.responseLanguage)
       ? data.responseLanguage : "";
-    const languageRule = responseLanguage
-      ? `\n【今回の回答言語】${responseLanguage}。可能な限り、この言語で自然に返答してください。`
-      : "\n【今回の回答言語】最新のユーザー質問と同じ言語で返答してください。";
+    const LANGUAGE_NAMES = {
+      "bn-BD": "Bengali (বাংলা)", "en-US": "English", "ja-JP": "Japanese (日本語)",
+      "hi-IN": "Hindi", "ur-PK": "Urdu", "ar-SA": "Arabic", "es-ES": "Spanish",
+      "fr-FR": "French", "de-DE": "German", "pt-BR": "Portuguese",
+      "zh-CN": "Chinese", "ko-KR": "Korean", "id-ID": "Indonesian",
+      "th-TH": "Thai", "vi-VN": "Vietnamese", "si-LK": "Sinhala"
+    };
+    const targetLanguage = LANGUAGE_NAMES[responseLanguage] || "the language of the latest user message";
+    const languageRule = `
+CRITICAL OUTPUT LANGUAGE POLICY:
+Respond ONLY in ${targetLanguage}. This applies to EVERY sentence, introduction,
+summary, closing sentence, follow-up question, and disclaimer.
+Never append Japanese greetings or festival advertising when the question is in Bengali/English/etc.
+If school source notes are in Japanese, translate or transliterate them into ${targetLanguage}.
+Keep proper nouns in original form ONLY if necessary for an exact address, school name, or official title.
+Do not add another language unless the user explicitly requests translation or bilingual output.
+If the user writes in Bengali, respond exclusively in natural Bengali script (বাংলা), not Japanese.
+If the user writes in English, respond exclusively in English, not Japanese.
+Your final answer should directly address the latest question; no unrelated festival promotion.
+`;
 
     const contents = [];
 

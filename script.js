@@ -151,7 +151,9 @@ function requestedVoiceLanguage() {
 function detectWrittenLanguage(text) {
   if (/[ঀ-৿]/u.test(text)) return "bn-BD";
   if (/[぀-ヿ]/u.test(text)) return "ja-JP";
-  if (/[一-鿿]/u.test(text)) return "zh-CN"; // may also be Japanese kanji
+  // Japanese kanji-only input is common in this TTC application.
+  // Honor kana first; for kanji-only text, default to Japanese unless explicitly Chinese.
+  if (/[一-鿿]/u.test(text)) return "ja-JP";
   if (/[가-힯]/u.test(text)) return "ko-KR";
   if (/[ऀ-ॿ]/u.test(text)) return "hi-IN";
   if (/[඀-෿]/u.test(text)) return "si-LK";
@@ -163,6 +165,9 @@ function detectWrittenLanguage(text) {
   if (/[Α-ω]/u.test(text)) return "el-GR";
   if (/[א-ת]/u.test(text)) return "he-IL";
   if (/[Ա-ֆ]/u.test(text)) return "hy-AM";
+  // Plain Latin-script questions default to English, not the browser's Japanese UI locale.
+  // For other Latin-script languages use the voice-language selector explicitly.
+  if (/[a-zA-Z]/.test(text)) return "en-US";
   return "";
 }
 
@@ -254,8 +259,8 @@ async function ask(question, spokenLanguage = "") {
   pendingChat = true;
   // For typed input, Gemini follows the actual message language.
   // For spoken input, use the chosen recognition locale.
-  const languageHint = spokenLanguage || detectWrittenLanguage(question);
-  lastQuestionLanguage = languageHint || detectWrittenLanguage(question) || (/[a-z]/i.test(question) ? "en-US" : deviceLanguage);
+  const languageHint = spokenLanguage || detectWrittenLanguage(question) || requestedVoiceLanguage();
+  lastQuestionLanguage = languageHint;
 
   add(question, true);
 
@@ -556,30 +561,30 @@ function speakAnswer(text, languageHint = "") {
 
   const utterance = new SpeechSynthesisUtterance(cleanText);
 
-  // Prioritize the answer's actual script; otherwise use the selected voice language.
-  // Voice availability is determined by OS/browser installed voices.
-  const scriptLanguage = detectWrittenLanguage(cleanText);
-  utterance.lang = scriptLanguage || languageHint || (/^[\x00-\x7F\s\p{P}]+$/u.test(cleanText) ? "en-US" : deviceLanguage);
-  // Japanese kanji-only replies are ambiguous: preserve Japanese when requested.
-  if (scriptLanguage === "zh-CN" && (!languageHint || (languageHint || "").startsWith("ja"))) {
-    utterance.lang = "ja-JP";
-  }
+  // The user's QUESTION language is authoritative: never switch to Japanese
+  // just because school names or a Japanese fragment appear in the answer.
+  utterance.lang = languageHint || detectWrittenLanguage(cleanText) || "en-US";
 
   utterance.rate = 1;
   utterance.pitch = 1;
 
-  const voice = window.speechSynthesis
-    .getVoices()
-    .find(v =>
-      v.lang.toLowerCase().startsWith(
-        utterance.lang.slice(0, 2).toLowerCase()
-      )
-    );
+  const voices = window.speechSynthesis.getVoices();
+  const locale = utterance.lang.toLowerCase();
+  const primaryLanguage = locale.split("-")[0];
+  const voice = voices.find(v => v.lang.toLowerCase() === locale) ||
+    voices.find(v => v.lang.toLowerCase().split("-")[0] === primaryLanguage);
 
   if (voice) {
     utterance.voice = voice;
   }
 
+  // Do not silently choose a Japanese/English voice for Bengali or another
+  // language when no suitable device voice exists.
+  if (!voice && voices.length && primaryLanguage !== "en") {
+    console.warn("Voice unavailable for", utterance.lang, "— install a matching device/browser voice.");
+    voiceMessage("🔇 この端末には回答言語の音声がありません。端末の音声を追加してください。");
+    return;
+  }
   window.speechSynthesis.speak(utterance);
 }
 
