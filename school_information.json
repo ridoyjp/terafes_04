@@ -6,6 +6,69 @@
   "status": "学校一般情報は公開された公式ページに基づく。学園祭2026の詳細は担当教員の確認が必要。",
   "entries": [
     {
+      "topic": "校長・理事長（学校の責任者）",
+      "keywords": [
+        "校長",
+        "校長先生",
+        "学校長",
+        "理事長",
+        "学園長",
+        "principal",
+        "president",
+        "kouchou",
+        "kocho",
+        "fukukouchou",
+        "sensei",
+        "rijichou",
+        "rijicho",
+        "teacher",
+        "শিক্ষক",
+        "প্রধান শিক্ষক",
+        "誰",
+        "dare"
+      ],
+      "text": "専門学校東京テクニカルカレッジの校長は白井 雅哲（しらい まさあき）先生。学校法人小山学園の理事長は山本 匡（やまもと ただし）氏。両者は別の役職。副校長・学科長・担当教員の最新氏名は公開資料で確認できない限り断定しない。",
+      "source": "https://tec.ttc.ac.jp/school/principle/ ; https://tec.ttc.ac.jp/news/nid15775/",
+      "verified": true
+    },
+    {
+      "topic": "学校の行き方（駅別）",
+      "keywords": [
+        "higashi nakano",
+        "nakano",
+        "eki",
+        "ikikata",
+        "doko",
+        "access",
+        "東中野",
+        "落合駅",
+        "中井駅",
+        "新宿駅",
+        "電車",
+        "道順",
+        "駅",
+        "行き方"
+      ],
+      "text": "JR中央・総武線『東中野駅』東口駅前、都営大江戸線『東中野駅』A1出口徒歩約1分、東京メトロ東西線『落合駅』徒歩約8分、西武新宿線『中井駅』徒歩約13分。〒164-8787 東京都中野区東中野4-2-3。",
+      "source": "https://tec.ttc.ac.jp/school/access/",
+      "verified": true
+    },
+    {
+      "topic": "学校の歴史と設立年の注意",
+      "keywords": [
+        "history",
+        "rekishi",
+        "創立",
+        "歴史",
+        "小山学園",
+        "学校法人",
+        "設立"
+      ],
+      "text": "学校法人小山学園は50年以上の歴史を持つ運営法人。東京テクニカルカレッジ単体の創立年数と混同しない。最新の学校紹介ページを確認する。",
+      "source": "https://tec.ttc.ac.jp/school/",
+      "verified": true
+    },
+    {
       "topic": "概要・歴史",
       "keywords": [
         "学校",

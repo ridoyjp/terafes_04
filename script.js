@@ -148,7 +148,19 @@ const deviceLanguage = (navigator.languages && navigator.languages[0]) || naviga
 function requestedVoiceLanguage() {
   return deviceLanguage;
 }
+// Conservative Romaji detection: do not treat ordinary English as Japanese.
+// Handles Japanese school questions written using Latin letters.
+function isJapaneseRomaji(text) {
+  const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
+  if (!q || /[\u0080-\uffff]/.test(q)) return false;
+  const japanesePhrases = /\b(?:desu|desuka|desu ka|masu|masuka|masu ka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|dare|doko|itsu|nanji|nani|nan desu|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|gakusai|gakuensai|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|wa dare|wa doko|wa nani|ni tsuite|no koto|tte nani|oshiete kudasai)\b/i;
+  const ttcSchoolRomaji = /\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|tokyo technical|higashi nakano)\b/i.test(q);
+  const japaneseGrammar = /\b(?:wa|no|ni|de|ga|wo|o)\b/i.test(q);
+  return japanesePhrases.test(q) || (ttcSchoolRomaji && japaneseGrammar);
+}
+
 function detectWrittenLanguage(text) {
+  if (isJapaneseRomaji(text)) return "ja-JP";
   if (/[ঀ-৿]/u.test(text)) return "bn-BD";
   if (/[぀-ヿ]/u.test(text)) return "ja-JP";
   // Japanese kanji-only input is common in this TTC application.
