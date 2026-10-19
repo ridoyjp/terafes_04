@@ -462,5 +462,76 @@ select {
   }
 }
 
-/* Speech UI additions */
-.welcome-audio-panel{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:7px 0 13px;z-index:5}.welcome-audio-panel button{background:#ffffff25;color:#fff;border:1px solid #ffffff78;border-radius:20px;padding:9px 13px;cursor:pointer}.welcome-audio-panel small{flex-basis:100%;color:#e1f6ff;font-size:11px}.voice-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:9px;padding:8px 18px 0;font-size:12px;color:#1f5475}.voice-toolbar select,.voice-toolbar button{padding:7px 9px;border-radius:12px;border:1px solid #b6dce9;background:white;color:#125078;cursor:pointer}.bubble .replay-inline{display:block;margin-top:6px;background:transparent;border:0;color:#00789b;font-size:12px;cursor:pointer;padding:2px}.voice-status[hidden]{display:none!important}@media(max-width:560px){.voice-toolbar{padding:4px 9px 0;gap:5px;font-size:10px}.voice-toolbar select,.voice-toolbar button{padding:6px;font-size:11px}}
+
+/* Welcome voice introduction — keep existing landing-page layout */
+.intro .welcome-voice-btn {
+  z-index:3;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:12px;
+  padding:11px 20px;
+  border:1px solid rgba(210,247,255,.58);
+  border-radius:999px;
+  background:rgba(255,255,255,.14);
+  color:#fff;
+  font:700 14px system-ui,"Noto Sans JP",sans-serif;
+  cursor:pointer;
+}
+.intro .welcome-voice-btn:hover {background:rgba(255,255,255,.24)}
+.intro .welcome-voice-btn:focus-visible {outline:3px solid #9cfaff;outline-offset:3px}
+.intro .welcome-voice-hint {z-index:3;font-size:11px!important;line-height:1.5!important;color:#dbf5ff!important;margin:7px 0 0!important}
+@media(max-width:560px) {
+  .intro .welcome-voice-btn {font-size:13px;padding:9px 16px;margin-top:8px}
+  .intro .welcome-voice-hint {font-size:10px!important;padding:0 10px}
+}
+/* Hide mouse-follow light; keep other festive visual effects. */
+.intro .light-follow {display:none!important}
+/* Prevent iOS Safari focusing message input from zooming. */
+#input, .composer input {font-size:16px!important}
+
+
+/* Multilingual voice input control - compatible with existing layout */
+.language-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;padding:7px 27px 0;background:#eef8fc;color:#235779;font-size:12px}
+.language-toolbar label{font-weight:650}
+.language-toolbar select{max-width:min(240px,100%);min-width:0;border:1px solid #b7dce7;border-radius:10px;background:white;color:#123b55;padding:8px 10px;font-size:16px;line-height:1.3}
+@media(max-width:560px){.language-toolbar{padding:7px 10px 0;gap:6px;justify-content:center;font-size:11px}.language-toolbar select{max-width:200px;font-size:16px}.chat .chat-content{min-height:0}.chat .messages{min-height:0}}
+
+/* Continuous narration: icon-only control; status remains screen-reader accessible. */
+.intro .welcome-voice-btn {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  padding: 0 !important;
+  margin-top: 12px;
+  border-radius: 50%;
+  font-size: 23px !important;
+  line-height: 1;
+}
+.intro .welcome-voice-hint {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* FINAL: compact professional mute control at top-right of welcome screen. */
+.intro .welcome-voice-btn {
+  position:fixed!important;top:max(16px,env(safe-area-inset-top))!important;
+  right:max(18px,env(safe-area-inset-right))!important;left:auto!important;bottom:auto!important;
+  z-index:999!important;margin:0!important;padding:0!important;
+  width:46px!important;height:46px!important;display:grid!important;place-items:center!important;
+  border-radius:50%!important;background:rgba(255,255,255,.14)!important;
+  border:1px solid rgba(255,255,255,.38)!important;color:#fff!important;
+  font-size:22px!important;line-height:1!important;backdrop-filter:blur(10px);
+  cursor:pointer;box-shadow:0 5px 20px rgba(0,10,30,.18);
+}
+.intro .welcome-voice-btn:hover{background:rgba(255,255,255,.26)!important}
+@media(max-width:600px){.intro .welcome-voice-btn{width:42px!important;height:42px!important;font-size:20px!important}}
+/* Prevent iOS automatic zoom of text input. */
+#input,.composer input,textarea,select{font-size:16px!important}
