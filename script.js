@@ -956,9 +956,12 @@ if (!("speechSynthesis" in window)) {
 const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 // The visible site name stays "AI Chat Bot"; use phonetic Japanese only for spoken welcome.
-const WELCOME_SPEECH = "こんにちは！TTC 学園祭エーアイ・チャットボットへようこそ！" +
-  "日本語を基本に、世界中のさまざまな言語で質問できます。" +
-  "音声でも文字でも、お気軽に質問してください！";
+const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジの学園祭へようこそ！" +
+  "私は、皆さんの学園祭をサポートするエーアイ・チャットボットです！" +
+  "学園祭のイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +
+  "学校や学科についての質問にもお答えします。" +
+  "文字でも音声でも質問でき、日本語のローマ字入力や、さまざまな言語にも対応しています。" +
+  "さあ、一緒に学園祭を楽しみましょう！";
 
 const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 let welcomeMuted = false;
