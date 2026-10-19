@@ -809,6 +809,32 @@ if (micButton) {
 }
 // ---------- VOICE OUTPUT ----------
 
+// Prefer a consistent voice on this device for every Japanese response.
+// A browser/device may have different installed voices; this is not a
+// cross-device identical-voice guarantee.
+const JAPANESE_VOICE_RATE = 0.95;
+const JAPANESE_VOICE_PITCH = 1;
+let pinnedJapaneseVoice = null;
+
+function getPinnedJapaneseVoice() {
+  const synth = window.speechSynthesis;
+  if (!synth) return null;
+  const voices = synth.getVoices();
+  if (pinnedJapaneseVoice && voices.some(v => v.voiceURI === pinnedJapaneseVoice.voiceURI && v.lang === pinnedJapaneseVoice.lang)) {
+    return voices.find(v => v.voiceURI === pinnedJapaneseVoice.voiceURI && v.lang === pinnedJapaneseVoice.lang);
+  }
+  // Prefer on-device Japanese voices to avoid differences between cloud voices.
+  const japanese = voices.filter(v => /^ja(?:-|$)/i.test(v.lang));
+  const chosen = japanese.find(v => v.localService && /ja-jp/i.test(v.lang)) ||
+    japanese.find(v => /ja-jp/i.test(v.lang)) || japanese[0] || null;
+  if (chosen) pinnedJapaneseVoice = chosen;
+  return chosen;
+}
+
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.addEventListener?.("voiceschanged", getPinnedJapaneseVoice);
+}
+
 function speakAnswer(text, languageHint = "") {
   if (
     !soundEnabled ||
@@ -830,14 +856,17 @@ function speakAnswer(text, languageHint = "") {
   // just because school names or a Japanese fragment appear in the answer.
   utterance.lang = languageHint || detectWrittenLanguage(cleanText) || "en-US";
 
-  utterance.rate = 1;
-  utterance.pitch = 1;
+  const isJapanese = utterance.lang.toLowerCase().startsWith("ja");
+  utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 1;
+  utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1;
 
   const voices = window.speechSynthesis.getVoices();
   const locale = utterance.lang.toLowerCase();
   const primaryLanguage = locale.split("-")[0];
-  const voice = voices.find(v => v.lang.toLowerCase() === locale) ||
-    voices.find(v => v.lang.toLowerCase().split("-")[0] === primaryLanguage);
+  const voice = isJapanese ? getPinnedJapaneseVoice() : (
+    voices.find(v => v.lang.toLowerCase() === locale) ||
+    voices.find(v => v.lang.toLowerCase().split("-")[0] === primaryLanguage)
+  );
 
   if (voice) {
     utterance.voice = voice;
@@ -955,11 +984,9 @@ function playWelcomeSpeech() {
   const utterance = new SpeechSynthesisUtterance(WELCOME_SPEECH);
   welcomeUtterance = utterance;
   utterance.lang = "ja-JP";
-  utterance.rate = 0.95;
-  utterance.pitch = 1;
-  const voices = synth.getVoices();
-  const jaVoice = voices.find(v => v.lang.toLowerCase() === "ja-jp") ||
-    voices.find(v => v.lang.toLowerCase().startsWith("ja"));
+  utterance.rate = JAPANESE_VOICE_RATE;
+  utterance.pitch = JAPANESE_VOICE_PITCH;
+  const jaVoice = getPinnedJapaneseVoice();
   if (jaVoice) utterance.voice = jaVoice;
   utterance.onstart = () => {
     if (welcomeUtterance !== utterance) return;
