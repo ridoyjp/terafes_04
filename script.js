@@ -441,8 +441,9 @@ let lastAudioSignalAt = 0;
 let voiceStartedAt = 0;
 let autoSendRecording = true;
 let recordingBusy = false;
-const MAX_RECORD_MS = 12000; // Safety limit.
-const SILENCE_MS = 800; // Fast auto-stop after ~0.8s of silence; short pauses may cause early stop.
+const IS_MOBILE_VOICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 900);
+const MAX_RECORD_MS = IS_MOBILE_VOICE ? 10000 : 12000; // Short mobile clips reduce upload time.
+const SILENCE_MS = IS_MOBILE_VOICE ? 700 : 800; // 0.7s mobile / 0.8s desktop; brief pauses can cut speech.
 const MAX_AUDIO_BYTES = 2_100_000;
 const TRANSCRIBE_API_URL = CHAT_API_URL.replace(/\/chat(?:\?.*)?$/, "/transcribe");
 
@@ -456,7 +457,7 @@ function setListening(active) {
   micButton.classList.toggle("is-listening", active);
   micButton.setAttribute("aria-pressed", String(active));
   micButton.textContent = active ? "⏹" : "🎙️";
-  micButton.title = active ? "手動で録音終了（通常は2秒の無音で自動送信）" : "一度押して話す：無音2秒で自動送信";
+  micButton.title = active ? "手動で録音終了（通常は短い無音で自動送信）" : "一度押して話す：無音約0.7秒で自動送信";
   micButton.setAttribute("aria-label", micButton.title);
 }
 function stopSilenceDetection() {
@@ -505,7 +506,7 @@ function startSilenceDetection(stream) {
         lastAudioSignalAt = now;
         if (!voiceStartedAt && candidateSpeechMs >= 250) {
           voiceStartedAt = now;
-          voiceMessage("🎙️ 聞き取り中… 話し終えて約0.8秒で録音を終了し、自動送信します。");
+          voiceMessage("🎙️ 聞き取り中… 話し終えて約0.7〜0.8秒で録音を終了し、自動送信します。");
         }
       } else {
         candidateSpeechMs = 0;
@@ -559,7 +560,8 @@ async function processRecording(blob) {
   }
   voiceMessage("🌍 言語を自動判定して文字に変換しています…");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35000);
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  const transcriptionStartedAt = performance.now();
   try {
     const audio = await toBase64(blob);
     // Report exact endpoint and network problems without exposing audio or API keys.
@@ -588,6 +590,7 @@ async function processRecording(blob) {
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
     const transcript = String(result.transcript || "").trim();
+    console.info("[Voice timing] transcription total:", Math.round(performance.now() - transcriptionStartedAt), "ms, audio bytes:", blob.size);
     if (!transcript) throw new Error("音声を認識できませんでした。もう一度お試しください。");
     const question = (input.value.trim() ? input.value.trim() + " " : "") + transcript;
     input.value = "";
@@ -633,10 +636,18 @@ async function startRecording() {
   try {
     window.speechSynthesis?.cancel();
     voiceMessage("🎙️ マイクの許可を求めています…");
-    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
     const preferred = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"];
     const mimeType = preferred.find(type => MediaRecorder.isTypeSupported(type));
-    recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
+    // Low-bitrate mono voice is sufficient for speech and smaller on mobile networks.
+    // Browsers may choose their own actual bitrate (especially iOS Safari).
+    const recorderOptions = { audioBitsPerSecond: 24000 };
+    if (mimeType) recorderOptions.mimeType = mimeType;
+    try {
+      recorder = new MediaRecorder(recordingStream, recorderOptions);
+    } catch (_) {
+      recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
+    }
     recordingChunks = [];
     recorder.ondataavailable = event => { if (event.data?.size) recordingChunks.push(event.data); };
     recorder.onerror = () => { voiceMessage("⚠️ 録音に失敗しました。マイクを確認してください。"); stopMicrophoneTracks(); recordingBusy = false; };
@@ -649,7 +660,7 @@ async function startRecording() {
     };
     recorder.start();
     setListening(true);
-    voiceMessage("🎙️ 話してください。話し終えて約0.8秒で録音を終了し、自動送信します（最大12秒）。");
+    voiceMessage(`🎙️ 話してください。約${SILENCE_MS / 1000}秒の無音で録音終了（最大${MAX_RECORD_MS / 1000}秒）。`);
     startSilenceDetection(recordingStream);
     recordingTimer = setTimeout(stopRecording, MAX_RECORD_MS);
   } catch (err) {
