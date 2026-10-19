@@ -43,7 +43,7 @@ function openChat() {
 }
 
 function closeChat() {
-  recognition?.stop();
+  cancelRecording();
   window.speechSynthesis?.cancel();
   voiceMessage("");
 
@@ -139,14 +139,13 @@ const CHAT_API_URL =
   (window.GAKUEN_CHAT_CONFIG?.apiUrl || "").trim();
 
 const chatHistory = [];
-const voiceLanguageSelect = document.getElementById("voiceLanguage");
 let lastQuestionLanguage = "";
 
-// Web Speech API does not reliably auto-detect spoken language.
-// Auto follows the browser locale; users can choose another recognition locale.
-const deviceLanguage = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
+// No visible language selector. Browser SpeechRecognition requires a recognition
+// locale; use the phone/browser's preferred language, not a fictional auto-detect.
+const deviceLanguage = (navigator.languages && navigator.languages[0]) || navigator.language || "ja-JP";
 function requestedVoiceLanguage() {
-  return voiceLanguageSelect?.value !== "auto" ? voiceLanguageSelect.value : deviceLanguage;
+  return deviceLanguage;
 }
 function detectWrittenLanguage(text) {
   if (/[ঀ-৿]/u.test(text)) return "bn-BD";
@@ -166,7 +165,7 @@ function detectWrittenLanguage(text) {
   if (/[א-ת]/u.test(text)) return "he-IL";
   if (/[Ա-ֆ]/u.test(text)) return "hy-AM";
   // Plain Latin-script questions default to English, not the browser's Japanese UI locale.
-  // For other Latin-script languages use the voice-language selector explicitly.
+  // Other Latin-script languages need a more capable recognizer for accurate auto-detection.
   if (/[a-zA-Z]/.test(text)) return "en-US";
   return "";
 }
@@ -423,125 +422,250 @@ document.querySelectorAll("[data-q]").forEach(button => {
   });
 })();
 
-// ---------- VOICE INPUT ----------
-
+// ---------- WORLDWIDE AUTOMATIC VOICE INPUT ----------
+// Records a short voice clip and sends it to Cloudflare/Gemini for multilingual
+// transcription. No language selector, and no assumed phone language.
+// A recording is uploaded only after the visitor presses the microphone.
 const micButton = document.getElementById("micButton");
 const soundButton = document.getElementById("soundButton");
 const voiceStatus = document.getElementById("voiceStatus");
-
-const SpeechRecognitionAPI =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
-
-let recognition = null;
-let listening = false;
+let recognition = null; // Kept for existing navigation cleanup.
 let soundEnabled = true;
+let recorder = null;
+let recordingStream = null;
+let recordingChunks = [];
+let recordingTimer = null;
+let silenceMonitor = null;
+let audioContext = null;
+let lastAudioSignalAt = 0;
+let voiceStartedAt = 0;
+let autoSendRecording = true;
+let recordingBusy = false;
+const MAX_RECORD_MS = 12000; // Safety limit.
+const SILENCE_MS = 800; // Fast auto-stop after ~0.8s of silence; short pauses may cause early stop.
+const MAX_AUDIO_BYTES = 2_100_000;
+const TRANSCRIBE_API_URL = CHAT_API_URL.replace(/\/chat(?:\?.*)?$/, "/transcribe");
 
 function voiceMessage(message) {
+  if (!voiceStatus) return;
   voiceStatus.textContent = message;
   voiceStatus.hidden = !message;
 }
-
 function setListening(active) {
-  listening = active;
-
+  if (!micButton) return;
   micButton.classList.toggle("is-listening", active);
   micButton.setAttribute("aria-pressed", String(active));
-
-  micButton.title = active ? "録音を停止" : "音声で質問";
-  micButton.setAttribute("aria-label", micButton.title);
-
   micButton.textContent = active ? "⏹" : "🎙️";
-}
-
-if (!SpeechRecognitionAPI) {
-  micButton.disabled = true;
-  micButton.title = "このブラウザーは音声入力に対応していません";
+  micButton.title = active ? "手動で録音終了（通常は2秒の無音で自動送信）" : "一度押して話す：無音2秒で自動送信";
   micButton.setAttribute("aria-label", micButton.title);
-
-} else {
-  micButton.addEventListener("click", () => {
-    if (listening) {
-      recognition?.stop();
-      return;
-    }
-
-    if (pendingChat) {
-      voiceMessage("AIの回答をお待ちください。");
-      return;
-    }
-
-    window.speechSynthesis?.cancel();
-
-    recognition = new SpeechRecognitionAPI();
-
-    recognition.lang = requestedVoiceLanguage();
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-
-    recognition.onstart = () => {
-      setListening(true);
-
-      voiceMessage(
-        "🎙️ 聞いています… 質問を話してください。"
-      );
-    };
-
-    recognition.onresult = event => {
-      const transcript =
-        event.results[0][0].transcript.trim();
-
-      if (transcript) {
-        input.value = "";
-        voiceMessage("");
-        ask(transcript, recognition.lang);
+}
+function stopSilenceDetection() {
+  if (silenceMonitor) clearInterval(silenceMonitor);
+  silenceMonitor = null;
+  // Close the analysis context as well as the microphone tracks.
+  if (audioContext) {
+    const context = audioContext;
+    audioContext = null;
+    context.close().catch(() => {});
+  }
+}
+function startSilenceDetection(stream) {
+  // MediaRecorder is still the source of the recording. Web Audio only measures
+  // amplitude locally; it does NOT attempt language recognition.
+  const AudioContextAPI = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextAPI) return; // Manual stop / 12-second safety timer remains.
+  try {
+    audioContext = new AudioContextAPI();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    let candidateSpeechMs = 0;
+    let noiseFloor = 0.004;
+    let samplesCount = 0;
+    const startTime = performance.now();
+    lastAudioSignalAt = 0;
+    voiceStartedAt = 0;
+    silenceMonitor = setInterval(() => {
+      if (!recorder || recorder.state !== "recording" || !audioContext) return;
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) sum += sample * sample;
+      const rms = Math.sqrt(sum / samples.length);
+      const now = performance.now();
+      // Estimate room noise before the first detected speech. Adapt slowly.
+      if (!voiceStartedAt && samplesCount < 8) {
+        noiseFloor = (noiseFloor * 0.7) + (Math.min(rms, 0.025) * 0.3);
+        samplesCount++;
       }
-    };
-
-    recognition.onerror = event => {
-      const errorMessages = {
-        "not-allowed":
-          "マイクの使用をブラウザーで許可してください。",
-
-        "audio-capture":
-          "マイクが見つかりません。",
-
-        "no-speech":
-          "音声が聞き取れませんでした。",
-
-        "network":
-          "音声認識のネットワークエラーです。"
-      };
-
-      voiceMessage(
-        errorMessages[event.error] ||
-        "音声入力に失敗しました。"
-      );
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-
-      if (voiceStatus.textContent.startsWith("🎙️")) {
-        voiceMessage("");
+      const threshold = Math.max(0.009, noiseFloor * 2.8);
+      if (rms > threshold) {
+        candidateSpeechMs += 100;
+        lastAudioSignalAt = now;
+        if (!voiceStartedAt && candidateSpeechMs >= 250) {
+          voiceStartedAt = now;
+          voiceMessage("🎙️ 聞き取り中… 話し終えて約0.8秒で録音を終了し、自動送信します。");
+        }
+      } else {
+        candidateSpeechMs = 0;
       }
-    };
-
-    try {
-      recognition.start();
-
-    } catch (error) {
-      console.error("Speech recognition error:", error);
-
-      setListening(false);
-
-      voiceMessage(
-        "音声入力を開始できませんでした。"
-      );
-    }
+      if (voiceStartedAt && now - lastAudioSignalAt >= SILENCE_MS) {
+        stopRecording();
+      } else if (!voiceStartedAt && now - startTime >= MAX_RECORD_MS - 250) {
+        voiceMessage("⚠️ 音声が検出できませんでした。もう一度お試しください。");
+      }
+    }, 100);
+  } catch (error) {
+    console.warn("Silence detector unavailable; manual stop still works", error?.name);
+    stopSilenceDetection();
+  }
+}
+function cancelRecording() {
+  autoSendRecording = false;
+  stopSilenceDetection();
+  if (recorder?.state === "recording") {
+    recorder.onstop = null;
+    try { recorder.stop(); } catch (_) {}
+  }
+  stopMicrophoneTracks();
+  recordingBusy = false;
+}
+function stopMicrophoneTracks() {
+  stopSilenceDetection();
+  if (recordingTimer) clearTimeout(recordingTimer);
+  recordingTimer = null;
+  recordingStream?.getTracks().forEach(track => track.stop());
+  recordingStream = null;
+  setListening(false);
+}
+function nativeDictation(message) {
+  voiceMessage(message || "🎙️ キーボードのマイクから音声入力できます。");
+  input.focus();
+}
+async function toBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(new Error("録音データを読み込めませんでした"));
+    reader.readAsDataURL(blob);
   });
 }
-
+async function processRecording(blob) {
+  if (!blob.size) { voiceMessage("⚠️ 音声が録音されませんでした。もう一度お試しください。"); return; }
+  if (blob.size > MAX_AUDIO_BYTES) { voiceMessage("⚠️ 音声が長すぎます。12秒以内でお話しください。"); return; }
+  if (!TRANSCRIBE_API_URL || !/^https:\/\//.test(TRANSCRIBE_API_URL)) {
+    nativeDictation("⚠️ AI音声認識のURLがありません。キーボードのマイクを使用してください。"); return;
+  }
+  voiceMessage("🌍 言語を自動判定して文字に変換しています…");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 35000);
+  try {
+    const audio = await toBase64(blob);
+    // Report exact endpoint and network problems without exposing audio or API keys.
+    // A browser TypeError/Failed to fetch means the request did not provide an HTTP response.
+    const payload = JSON.stringify({ audio, mimeType: blob.type || "audio/webm" });
+    let response;
+    try {
+      response = await fetch(TRANSCRIBE_API_URL, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: controller.signal
+      });
+    } catch (networkError) {
+      // A single retry helps with brief mobile handoffs. Never repeat an HTTP error.
+      if (networkError?.name === "AbortError") throw networkError;
+      await new Promise(resolve => setTimeout(resolve, 600));
+      response = await fetch(TRANSCRIBE_API_URL, {
+        method: "POST", mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: controller.signal
+      });
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    const transcript = String(result.transcript || "").trim();
+    if (!transcript) throw new Error("音声を認識できませんでした。もう一度お試しください。");
+    const question = (input.value.trim() ? input.value.trim() + " " : "") + transcript;
+    input.value = "";
+    voiceMessage("✅ 音声を認識しました。質問を送信しています…");
+    // The Gemini transcription preserves the spoken language in its script.
+    // Let ask() infer the response language from that actual written transcript.
+    if (autoSendRecording && !document.getElementById("chat").classList.contains("active")) {
+      input.value = question; // Never send when the visitor has left the chat.
+    } else if (autoSendRecording) {
+      await ask(question);
+    } else {
+      input.value = question;
+    }
+  } catch (err) {
+    console.warn("Multilingual transcription failed", err?.message);
+    const isNetworkError = err instanceof TypeError || /Failed to fetch|NetworkError|Load failed/i.test(String(err?.message || ""));
+    const explanation = err?.name === "AbortError"
+      ? "通信がタイムアウトしました。短く録音して再試行してください。"
+      : isNetworkError
+        ? "サーバーに接続できません。通信環境・ブラウザーの通信制限を確認し、ページを更新してください。"
+        : String(err?.message || "接続エラー");
+    voiceMessage("⚠️ 音声認識エラー: " + explanation + " キーボードのマイクも利用できます。");
+  } finally {
+    clearTimeout(timeout);
+    recordingBusy = false;
+    if (micButton) micButton.disabled = false;
+  }
+}
+function stopRecording() {
+  if (recorder?.state === "recording") {
+    recorder.stop();
+  } else {
+    stopMicrophoneTracks();
+  }
+}
+async function startRecording() {
+  if (recordingBusy || pendingChat) return;
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    nativeDictation("🎙️ このブラウザーでは録音できません。Safari/ChromeのHTTPSサイトで開くか、キーボードのマイクをお使いください。");
+    return;
+  }
+  recordingBusy = true;
+  try {
+    window.speechSynthesis?.cancel();
+    voiceMessage("🎙️ マイクの許可を求めています…");
+    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    const preferred = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"];
+    const mimeType = preferred.find(type => MediaRecorder.isTypeSupported(type));
+    recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
+    recordingChunks = [];
+    recorder.ondataavailable = event => { if (event.data?.size) recordingChunks.push(event.data); };
+    recorder.onerror = () => { voiceMessage("⚠️ 録音に失敗しました。マイクを確認してください。"); stopMicrophoneTracks(); recordingBusy = false; };
+    autoSendRecording = true;
+    recorder.onstop = () => {
+      const audioBlob = new Blob(recordingChunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+      recordingChunks = [];
+      stopMicrophoneTracks();
+      processRecording(audioBlob);
+    };
+    recorder.start();
+    setListening(true);
+    voiceMessage("🎙️ 話してください。話し終えて約0.8秒で録音を終了し、自動送信します（最大12秒）。");
+    startSilenceDetection(recordingStream);
+    recordingTimer = setTimeout(stopRecording, MAX_RECORD_MS);
+  } catch (err) {
+    stopMicrophoneTracks(); recordingBusy = false;
+    voiceMessage(err?.name === "NotAllowedError" ?
+      "⚠️ マイクの使用が許可されていません。サイトのマイク設定を許可してください。" :
+      "⚠️ 録音できませんでした。キーボードのマイクも使えます。");
+  }
+}
+if (micButton) {
+  micButton.disabled = false;
+  micButton.addEventListener("click", () => {
+    if (recorder?.state === "recording") stopRecording(); // Optional manual stop.
+    else startRecording();
+  });
+}
 // ---------- VOICE OUTPUT ----------
 
 function speakAnswer(text, languageHint = "") {
@@ -643,10 +767,8 @@ const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 // The visible site name stays "AI Chat Bot"; use phonetic Japanese only for spoken welcome.
 const WELCOME_SPEECH = "こんにちは！TTC 学園祭エーアイ・チャットボットへようこそ！" +
-  "学校のことだけでなく、勉強・プログラミング・一般知識など、さまざまな質問ができます。" +
-  "日本語を基本言語とし、世界中のさまざまな言語に対応しています。" +
-  "質問した言語でAIが回答します。音声入力はご希望の言語を選択してください。" +
-  "ぜひお気軽に使ってみてください！";
+  "日本語を基本に、世界中のさまざまな言語で質問できます。" +
+  "音声でも文字でも、お気軽に質問してください！";
 
 const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 let welcomeMuted = false;
@@ -683,7 +805,7 @@ function stopWelcomeSpeech() {
 function repeatWelcome() {
   if (welcomeMuted || !isWelcomeVisible()) return;
   clearTimeout(welcomeRepeatTimer);
-  welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 800);
+  welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 250);
 }
 function playWelcomeSpeech() {
   if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible()) return;
