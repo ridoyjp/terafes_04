@@ -43,6 +43,9 @@ function openChat() {
 }
 
 function closeChat() {
+  japaneseOnlyListening = false;
+  japaneseOnlyTranscript = "";
+  setListening(false);
   stopFastJapaneseRecognition();
   cancelRecording();
   window.speechSynthesis?.cancel();
@@ -545,7 +548,7 @@ function setListening(active) {
   micButton.classList.toggle("is-listening", active);
   micButton.setAttribute("aria-pressed", String(active));
   micButton.textContent = active ? "⏹" : "🎙️";
-  micButton.title = active ? "録音中（無音で自動終了、タップでも終了）" : "一度タップして話す：無音で自動送信";
+  micButton.title = active ? "日本語音声認識中（もう一度タップして送信）" : "日本語で音声入力（話し終えると自動送信）";
   micButton.setAttribute("aria-label", micButton.title);
 }
 function stopSilenceDetection() {
@@ -791,19 +794,82 @@ async function startRecording() {
       "⚠️ 録音できませんでした。キーボードのマイクも使えます。");
   }
 }
+// Chat microphone: Japanese-only and browser-native for minimum latency.
+// No parallel MediaRecorder/Gemini upload when Japanese recognition is supported.
+let japaneseOnlyListening = false;
+let japaneseOnlyTranscript = "";
+function finishJapaneseOnlyVoice(sendQuestion) {
+  const transcript = japaneseOnlyTranscript.trim();
+  japaneseOnlyTranscript = "";
+  japaneseOnlyListening = false;
+  setListening(false);
+  recognition = null;
+  if (!sendQuestion || !transcript || pendingChat) {
+    if (!transcript && sendQuestion) voiceMessage("⚠️ 日本語を認識できませんでした。もう一度お試しください。");
+    return;
+  }
+  const question = (input.value.trim() ? input.value.trim() + " " : "") + transcript;
+  input.value = "";
+  voiceMessage("✅ 日本語を認識しました。送信しています…");
+  if (document.getElementById("chat")?.classList.contains("active")) void ask(question, "ja-JP");
+  else input.value = question;
+}
+function startJapaneseOnlyVoice() {
+  if (pendingChat || japaneseOnlyListening) return;
+  if (!BrowserSpeechRecognition) {
+    voiceMessage("⚠️ このブラウザーは日本語の音声入力に対応していません。Chromeなどの対応ブラウザーか、キーボードの音声入力をお使いください。");
+    return;
+  }
+  try {
+    window.speechSynthesis?.cancel();
+    const r = new BrowserSpeechRecognition();
+    recognition = r;
+    japaneseOnlyTranscript = "";
+    japaneseOnlyListening = true;
+    r.lang = "ja-JP";
+    r.interimResults = true;
+    r.continuous = false;
+    r.maxAlternatives = 1;
+    r.onresult = (event) => {
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          japaneseOnlyTranscript = String(event.results[i][0]?.transcript || "").trim();
+        }
+      }
+    };
+    r.onerror = (event) => {
+      if (recognition !== r) return;
+      japaneseOnlyListening = false;
+      recognition = null;
+      setListening(false);
+      japaneseOnlyTranscript = "";
+      const error = event?.error || "unknown";
+      voiceMessage(error === "not-allowed" || error === "service-not-allowed"
+        ? "⚠️ マイクの使用を許可してください。"
+        : "⚠️ 日本語の音声認識が利用できません。もう一度お試しください。");
+    };
+    r.onend = () => {
+      if (recognition !== r) return;
+      finishJapaneseOnlyVoice(true);
+    };
+    r.start();
+    setListening(true);
+    voiceMessage("🎙️ 日本語で話してください。話し終えると自動送信します。");
+  } catch (error) {
+    japaneseOnlyListening = false;
+    recognition = null;
+    setListening(false);
+    voiceMessage("⚠️ 日本語の音声入力を開始できませんでした。");
+  }
+}
 if (micButton) {
   micButton.disabled = false;
   micButton.addEventListener("click", () => {
-    if (recorder?.state === "recording") {
-      stopFastJapaneseRecognition();
-      stopRecording(); // Optional manual stop.
+    if (japaneseOnlyListening && recognition) {
+      // Manual stop triggers onend and sends the last final Japanese result.
+      try { recognition.stop(); } catch (_) { finishJapaneseOnlyVoice(false); }
     } else {
-      japaneseFastSucceeded = false;
-      unlockAudioFromTap();
-      // Browser STT starts within the original user gesture where possible.
-      // A recorded Gemini path is also prepared for automatic fallback.
-      startFastJapaneseRecognition();
-      startRecording();
+      startJapaneseOnlyVoice();
     }
   });
 }
@@ -957,7 +1023,7 @@ const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 // The visible site name stays "AI Chat Bot"; use phonetic Japanese only for spoken welcome.
 const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジの学園祭へようこそ！" +
-  "私は、皆さんの学園祭をサポートするエーアイ・チャットボットです！" +
+  "私は、がくえんさいエーアイです。皆さんの学園祭をサポートするチャットボットです！" +
   "学園祭のイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +
   "学校や学科についての質問にもお答えします。" +
   "文字でも音声でも質問でき、日本語のローマ字入力や、さまざまな言語にも対応しています。" +
