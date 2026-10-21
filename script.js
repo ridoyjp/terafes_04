@@ -1021,7 +1021,7 @@ if (!("speechSynthesis" in window)) {
 // also unlocks speech when browser autoplay policy requires it.
 const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
-// The visible site name stays "AI Chat Bot"; use phonetic Japanese only for spoken welcome.
+// Gakuensai AI: pronounce the name consistently as がくえんさいエーアイ.
 const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジの学園祭へようこそ！" +
   "私は、がくえんさいエーアイです。皆さんの学園祭をサポートするチャットボットです！" +
   "学園祭のイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +

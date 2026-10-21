@@ -492,10 +492,7 @@ select {
 
 
 /* Multilingual voice input control - compatible with existing layout */
-.language-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;padding:7px 27px 0;background:#eef8fc;color:#235779;font-size:12px}
-.language-toolbar label{font-weight:650}
-.language-toolbar select{max-width:min(240px,100%);min-width:0;border:1px solid #b7dce7;border-radius:10px;background:white;color:#123b55;padding:8px 10px;font-size:16px;line-height:1.3}
-@media(max-width:560px){.language-toolbar{padding:7px 10px 0;gap:6px;justify-content:center;font-size:11px}.language-toolbar select{max-width:200px;font-size:16px}.chat .chat-content{min-height:0}.chat .messages{min-height:0}}
+@media(max-width:560px){.chat .chat-content{min-height:0}.chat .messages{min-height:0}}
 
 /* Continuous narration: icon-only control; status remains screen-reader accessible. */
 .intro .welcome-voice-btn {
@@ -535,3 +532,6 @@ select {
 @media(max-width:600px){.intro .welcome-voice-btn{width:42px!important;height:42px!important;font-size:20px!important}}
 /* Prevent iOS automatic zoom of text input. */
 #input,.composer input,textarea,select{font-size:16px!important}
+
+/* Mobile mic improvements: tap target and keyboard dictation fallback */
+@media(max-width:700px){.composer #micButton{min-width:44px!important;min-height:44px!important;touch-action:manipulation}.voice-status{padding:6px 14px 9px;line-height:1.5;overflow-wrap:anywhere}}
