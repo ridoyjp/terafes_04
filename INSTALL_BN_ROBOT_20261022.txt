@@ -1,0 +1,18 @@
+TTC 学園祭 AI — Full Robot Update
+
+এই ZIP-এর সব ফাইল C:\terafes_04 ফোল্ডারে কপি করুন। .git ফোল্ডার বদলাবেন না।
+
+Voice: first cycle starts with こんにちは！; later cycles skip こんにちは！. Bow animation triggers each speech cycle; eye blink and approximate mouth movement while speaking.
+
+IMPORTANT: Browser autoplay may require first click/tap. The bow is synchronized with speech-cycle start, not guaranteed to finish before voice starts (preserves browser audio activation).
+
+CMD:
+cd /d C:\terafes_04
+node --check script.js
+git add -A
+git diff --cached --check
+git commit -m "Update TTC robot welcome animation"
+git push origin main
+
+Cloudflare worker deployment is not required for this frontend-only change.
+Windows Defender: scan the archive before opening. If threat detected, do not override protection.

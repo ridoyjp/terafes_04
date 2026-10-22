@@ -64,6 +64,16 @@ document.getElementById("startButton")
 document.getElementById("backButton")
   .addEventListener("click", closeChat);
 
+// Welcome shortcuts open the chat before sending a question.
+// Existing [data-q] chat shortcuts and Gemini backend are unchanged.
+document.querySelectorAll("[data-intro-question]").forEach(button => {
+  button.addEventListener("click", () => {
+    const question = button.dataset.introQuestion;
+    openChat();
+    if (question) ask(question);
+  });
+});
+
 // ---------- CHAT ELEMENTS ----------
 
 const BOT_ICON = "assets/robot-logo.png";
@@ -929,7 +939,8 @@ if (micButton) {
 // Prefer a consistent voice on this device for every Japanese response.
 // A browser/device may have different installed voices; this is not a
 // cross-device identical-voice guarantee.
-const JAPANESE_VOICE_RATE = 0.95;
+const JAPANESE_VOICE_RATE = 0.88; // Natural, slightly slower Japanese chat replies
+const WELCOME_VOICE_RATE = 0.84; // Gentle welcome narration
 const JAPANESE_VOICE_PITCH = 1;
 let pinnedJapaneseVoice = null;
 
@@ -942,8 +953,14 @@ function getPinnedJapaneseVoice() {
   }
   // Prefer on-device Japanese voices to avoid differences between cloud voices.
   const japanese = voices.filter(v => /^ja(?:-|$)/i.test(v.lang));
-  const chosen = japanese.find(v => v.localService && /ja-jp/i.test(v.lang)) ||
-    japanese.find(v => /ja-jp/i.test(v.lang)) || japanese[0] || null;
+  const chosen = [...japanese].sort((a, b) => {
+    const score = v => {
+      const name = String(v.name || "").toLowerCase();
+      return (/natural|neural|enhanced|premium/.test(name) ? 8 : 0) +
+        (/ja-jp/i.test(v.lang) ? 4 : 0) + (v.localService ? 2 : 0);
+    };
+    return score(b) - score(a);
+  })[0] || null;
   if (chosen) pinnedJapaneseVoice = chosen;
   return chosen;
 }
@@ -1007,7 +1024,7 @@ function speakAnswer(text, languageHint = "") {
       .replace(/学園祭\s*(?:AI|ＡＩ)/gi, "がくえんさい、エーアイ")
       .replace(/学園祭/g, "がくえんさい");
   }
-  utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 0.97;
+  utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 0.94;
   utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1.0;
   utterance.volume = 1;
 
@@ -1092,8 +1109,8 @@ if (welcomeRobot) {
 }
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 console.info("[TTC Voice Version] welcome-autoplay-gesture-v4");
-const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジのがくえんさいへようこそ！" +
-  "私は、がくえんさい、エーアイです。皆さんをサポートするチャットボットです！" +
+const WELCOME_SPEECH = "こんにちは！　東京テクニカルカレッジのがくえんさいへようこそ！　" +
+  "私は、がくえんさい、エーアイです。　皆さんをサポートするチャットボットです！　" +
   "がくえんさいのイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +
   "学校や学科についての質問にもお答えします。" +
   "マイクは日本語の音声入力に対応しています。文字入力ではローマ字や、さまざまな言語でも質問できます。" +
@@ -1147,7 +1164,7 @@ function stopWelcomeSpeech() {
 function repeatWelcome() {
   if (!welcomeMuted && isWelcomeVisible()) {
     clearTimeout(welcomeRepeatTimer);
-    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 500);
+    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 1200);
   }
 }
 function playWelcomeSpeech(fromGesture = false) {
@@ -1160,7 +1177,7 @@ function playWelcomeSpeech(fromGesture = false) {
   const utterance = new SpeechSynthesisUtterance(welcomeCompletedCycles ? WELCOME_SPEECH_REPEAT : WELCOME_SPEECH);
   welcomeUtterance = utterance;
   utterance.lang = "ja-JP";
-  utterance.rate = JAPANESE_VOICE_RATE;
+  utterance.rate = WELCOME_VOICE_RATE;
   utterance.pitch = JAPANESE_VOICE_PITCH;
   utterance.volume = 1;
   const jaVoice = getPinnedJapaneseVoice();

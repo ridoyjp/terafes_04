@@ -1,0 +1,15 @@
+TTC AI Chatbot Fast One-Tap Auto Send
+
+Updated script.js uses 800ms silence threshold instead of 2000ms.
+Preserves Gemini /transcribe multilingual auto-detect and automatic ask() send.
+Warning: natural pauses or background noise can cause early or delayed detection.
+Transcription and AI response still take network time.
+
+Install: copy only script.js into C:\terafes_04\script.js; do not overwrite your locally customized other files.
+Commands:
+ cd /d C:\terafes_04
+ node --check script.js
+ git add script.js
+ git diff --cached
+ git commit -m "Speed up one-tap multilingual voice auto send"
+ git push origin main

@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const html = fs.readFileSync('index.html', 'utf8');
+const css = fs.readFileSync('robot-body-glow.css', 'utf8');
+assert.match(html, /hero-robot-round-glow\.png/);
+assert.match(html, /robot-body-glow\.css/);
+assert.match(html, /ttc-chest-halo/);
+assert.match(html, /ttc-chest-sparkles/);
+assert.match(css, /prefers-reduced-motion/);
+assert.match(css, /ttcChestBreathe/);
+assert.ok(fs.statSync('assets/hero-robot-round-glow.png').size > 100_000);
+console.log('PASS: robot chest glow markup, styles and asset checks');

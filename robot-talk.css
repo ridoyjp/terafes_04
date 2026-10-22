@@ -1,0 +1,84 @@
+/* TTC Group 04 | High-definition robot + natural talking animation.
+   Loaded after hero-responsive.css; existing chat UI and worker are untouched. */
+#intro .welcome-robot-stage {
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  width: clamp(225px, 23vw, 310px) !important;
+  margin-bottom: clamp(0px, .6vh, 6px) !important;
+  isolation: isolate;
+  animation: robotFloat 5.2s ease-in-out infinite;
+}
+/* Remove ONLY the ring around the robot, not the ambient background waves. */
+#intro .welcome-robot-stage::before,
+#intro .welcome-robot-stage::after,
+#intro .robot-speech-rings {
+  content: none !important;
+  display: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+#intro .welcome-robot-picture {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  image-rendering: auto;
+  filter: drop-shadow(0 10px 17px rgba(0, 12, 57, .3));
+}
+#intro .robot-face-animation {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+}
+#intro .robot-eye-lid {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ttcHDBlink 5.7s ease-in-out infinite;
+}
+#intro .robot-eye-lid--right { animation-delay: .035s; }
+#intro .robot-mouth {
+  fill: #1df5ff;
+  filter: drop-shadow(0 0 12px rgba(0, 236, 255, .9));
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(.83);
+}
+/* Browser speechSynthesis onstart/onend controls is-speaking in script.js. */
+#intro .welcome-robot-stage.is-speaking .robot-mouth {
+  animation: ttcHDTalk .43s ease-in-out infinite;
+}
+@keyframes ttcHDBlink {
+  0%, 40%, 42%, 45%, 80%, 82%, 85%, 100% { opacity: 0; }
+  43%, 83% { opacity: 1; }
+}
+/* Natural rhythm instead of aggressive fast flashing. This is visual sync,
+   not phoneme-accurate audio-driven lip synchronization. */
+@keyframes ttcHDTalk {
+  0%, 100% { transform: scaleY(.45) scaleX(.90); }
+  22% { transform: scaleY(.93) scaleX(1); }
+  47% { transform: scaleY(1.17) scaleX(1.04); }
+  68% { transform: scaleY(.61) scaleX(.94); }
+  86% { transform: scaleY(1.05) scaleX(1); }
+}
+@media (max-width: 600px) {
+  #intro .welcome-robot-stage {
+    width: clamp(180px, 54vw, 242px) !important;
+  }
+}
+@media (max-height: 720px) {
+  #intro .welcome-robot-stage { width: min(42vw, 182px) !important; }
+}
+@media (max-height: 560px) and (min-width: 601px) {
+  #intro .welcome-robot-stage { width: 130px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #intro .welcome-robot-stage,
+  #intro .robot-eye-lid,
+  #intro .welcome-robot-stage.is-speaking .robot-mouth { animation: none !important; }
+}

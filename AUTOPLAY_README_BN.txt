@@ -1,0 +1,1 @@
+TTC Robot: welcome Japanese voice starts automatically when the browser allows sound. Modern browsers may require one initial user click/tap; this cannot be bypassed by JavaScript. After starting, it loops continuously while the welcome page is visible. No bow; mouth moves during speech and robot blinks. Chat page stops welcome narration. Never disable Defender to install.

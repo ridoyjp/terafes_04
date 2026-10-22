@@ -1,0 +1,15 @@
+TTC Gakuensai Voice fix (original uploaded project based)
+
+1. Backup C:\terafes_04\script.js and index.html.
+2. Copy the included script.js and index.html to C:\terafes_04\.
+3. Run: node --check script.js
+4. Run: git diff --check
+5. Review: git diff --stat
+6. Run: git add script.js index.html
+7. Run: git commit -m "Refresh Gakuensai welcome voice"
+8. Run: git push origin main
+9. After GitHub Pages deployment, hard refresh the website.
+10. Open F12 Console and confirm: [TTC Voice Version] gakuensai-fixed-20261021-3
+
+If voice still says matsuri AFTER this exact console line appears, your local Japanese TTS voice is mispronouncing the word or audio comes from a different source. Share Chrome voice details / recording.
+This patch does not modify Worker, voice transcription, auto send, welcome loop or CSS.

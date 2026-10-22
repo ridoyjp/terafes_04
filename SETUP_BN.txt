@@ -1,0 +1,14 @@
+TTC Japanese Same Voice update
+
+1. Replace only C:\terafes_04\script.js with the script.js from this ZIP.
+2. Update index.html script URL query to force browsers to reload:
+   script.js?v=20261019-same-japanese-voice1
+3. Test with Japanese and Romaji questions. Both should use the same selected Japanese voice on the SAME device/browser.
+4. Run:
+   cd /d C:\terafes_04
+   node --check script.js
+   git add script.js index.html
+   git commit -m "Keep consistent Japanese answer voice"
+   git push origin main
+
+Note: same synthetic voice across Windows, Android and iPhone is not guaranteed by Web Speech API. For identical voice on all devices, use server-side TTS with one chosen voice model.

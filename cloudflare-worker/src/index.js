@@ -65,7 +65,7 @@ function getRelevantSchoolData(message, history) {
       if(e && !selected.includes(e)) selected.push(e);
     }
   }
-  return '【学校確認資料（2026-10-22時点）】\n'+selected.slice(0,9).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source||'未提供（学園祭担当教員に確認）'}`).join('\n\n');
+  return '【学校確認資料（2026-10-19時点）】\n'+selected.slice(0,9).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source||'未提供（学園祭担当教員に確認）'}`).join('\n\n');
 }
 
 // Teacher-reviewed 2026 festival information. Draft records must NEVER be

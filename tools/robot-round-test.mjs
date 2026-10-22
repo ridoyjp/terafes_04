@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const html = fs.readFileSync('index.html','utf8');
+const css = fs.readFileSync('robot-talk.css','utf8');
+const glow = fs.readFileSync('robot-body-glow.css','utf8');
+const png = fs.readFileSync('assets/hero-robot-round-glow.png');
+assert.match(html,/hero-robot-round-glow\.png/);
+assert.match(html,/viewBox="0 0 1254 1254"/);
+assert.match(css,/aspect-ratio: 1 \/ 1/);
+assert.match(css,/ttcHDTalk/);
+assert.match(glow,/ttcChestBreathe/);
+assert.equal(png.toString('hex',0,8),'89504e470d0a1a0a');
+assert.equal(png.readUInt32BE(16),1254);
+assert.equal(png.readUInt32BE(20),1254);
+assert.ok(png.length>100_000);
+console.log('PASS: round robot asset, responsive aspect ratio, talk and glow preserved');
