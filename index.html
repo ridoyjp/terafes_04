@@ -2,22 +2,60 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b2948">
   <meta name="description" content="TTC 学園祭 2026 AI Chat Bot。フード、ゲーム、ステージ、会場案内について質問できる、音声対応のAIチャットガイドです。">
   <title>TTC 学園祭 2026 | AIチャットボット</title>
   <link rel="stylesheet" href="style.css?v=20261022-robot-voice-bow-v2">
+  <link rel="stylesheet" href="hero-responsive.css?v=20261022-logo-up-v1">
+  <link rel="stylesheet" href="robot-talk.css?v=20261022-round-v1">
+  <link rel="stylesheet" href="robot-body-glow.css?v=20261022-round-v1">
+  <link rel="preload" href="assets/hero-robot-round-glow.png" as="image">
 </head>
 <body>
   <!-- Landing page; existing CSS and JS selectors are preserved. -->
   <section class="intro" id="intro" aria-label="AI Chat Bot スタート画面">
     <img class="intro-logo" id="introLogo" alt="TTC 学園祭 2026 ロゴ" src="assets/festival-logo.webp">
     <div class="welcome-robot-stage" id="welcomeRobot" role="img" aria-label="笑顔でお迎えする、がくえんさいAIロボット">
-      <img class="welcome-robot-picture" src="assets/welcome-robot.png" alt="" draggable="false">
-      <span class="robot-eye-glow robot-eye-left" aria-hidden="true"></span>
-      <span class="robot-eye-glow robot-eye-right" aria-hidden="true"></span>
-      <span class="robot-mouth-glow" aria-hidden="true"></span>
-      <span class="robot-speech-rings" aria-hidden="true"></span>
+      <img class="welcome-robot-picture" src="assets/hero-robot-round-glow.png" alt="" draggable="false">
+      <!-- Eyes are part of the HD artwork; short eyelid animations create natural blinks.
+           The mouth is vector-based and animates ONLY while the welcome voice speaks. -->
+      <svg class="robot-face-animation" viewBox="0 0 1254 1254" aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="robotEyeCover" cx="50%" cy="40%" r="80%">
+            <stop offset="0%" stop-color="#001b3c"/>
+            <stop offset="100%" stop-color="#01172e"/>
+          </radialGradient>
+        </defs>
+        <g class="robot-eye-lids">
+          <ellipse class="robot-eye-lid robot-eye-lid--left" cx="470" cy="419" rx="75" ry="54" fill="url(#robotEyeCover)" />
+          <ellipse class="robot-eye-lid robot-eye-lid--right" cx="781" cy="419" rx="75" ry="54" fill="url(#robotEyeCover)" />
+        </g>
+        <path class="robot-mouth" d="M577 505 Q620 501 663 505 Q673 511 668 530 Q655 558 620 560 Q590 558 576 532 Q571 514 577 505 Z" />
+        <!-- Soft glowing chest core, sparkle twinkles, no outer robot circle. -->
+        <defs>
+          <radialGradient id="ttcChestHalo">
+            <stop offset="0" stop-color="#d9ffff" stop-opacity=".75"/>
+            <stop offset=".38" stop-color="#1cffff" stop-opacity=".4"/>
+            <stop offset="1" stop-color="#00d9ff" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="ttcChestCenter">
+            <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>
+            <stop offset=".52" stop-color="#8bffff" stop-opacity=".68"/>
+            <stop offset="1" stop-color="#20eaff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g class="ttc-chest-light" aria-hidden="true">
+          <circle class="ttc-chest-halo" cx="625" cy="827" r="145" fill="url(#ttcChestHalo)"/>
+          <circle class="ttc-chest-ring" cx="625" cy="827" r="70" fill="none" stroke="#a2ffff" stroke-width="7" stroke-opacity=".65"/>
+          <circle class="ttc-chest-core" cx="625" cy="827" r="37" fill="url(#ttcChestCenter)"/>
+          <g class="ttc-chest-sparkles" fill="#dfffff">
+            <path class="ttc-sparkle ttc-sparkle-1" d="M533 751 l5 15 15 5 -15 5 -5 15 -5 -15 -15 -5 15 -5Z"/>
+            <path class="ttc-sparkle ttc-sparkle-2" d="M725 755 l4 12 12 4 -12 4 -4 12 -4 -12 -12 -4 12 -4Z"/>
+            <path class="ttc-sparkle ttc-sparkle-3" d="M711 909 l3 10 10 3 -10 3 -3 10 -3 -10 -10 -3 10 -3Z"/>
+          </g>
+        </g>
+      </svg>
     </div>
     <h1>学園祭 AI</h1>
     <p>学園祭をもっと楽しく。気になる情報をAIチャットで簡単にチェック！</p>
@@ -25,7 +63,9 @@
     <button class="welcome-voice-btn" id="welcomeVoiceButton" type="button" aria-label="音声をミュート" aria-pressed="false" title="音声をミュート">🔊</button>
     <p class="welcome-voice-hint" id="welcomeVoiceHint" aria-live="polite">音声が始まらない場合は、画面を一度タップしてください。</p>
     <div class="intro-features" aria-label="おすすめ機能">
-      <span>✦ おすすめ</span><span>⌁ フード</span><span>✧ イベント</span>
+      <button class="intro-feature" type="button" data-intro-question="おすすめは何ですか？">✦ おすすめ</button>
+      <button class="intro-feature" type="button" data-intro-question="食べ物はどこですか？">⌁ フード</button>
+      <button class="intro-feature" type="button" data-intro-question="イベントについて教えて">✧ イベント</button>
     </div>
   </section>
 
@@ -106,6 +146,6 @@
     </div>
   </main>
   <script src="config.js?v=20261022-jp-ux1"></script>
-  <script src="script.js?v=20261022-robot-voice-bow-v2"></script>
+  <script src="script.js?v=20261022-hd-natural-v2"></script>
 </body>
 </html>
