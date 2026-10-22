@@ -1114,7 +1114,7 @@ function isWelcomeVisible() {
     !document.getElementById("chat").classList.contains("active");
 }
 function welcomeStatus(message) {
-  if (welcomeVoiceHint) welcomeVoiceHint.textContent = message;
+  // No on-screen sound-on notice or permission message.
 }
 function updateWelcomeButton() {
   if (!welcomeVoiceButton) return;
@@ -1124,7 +1124,7 @@ function updateWelcomeButton() {
   welcomeVoiceButton.setAttribute("aria-pressed", String(welcomeMuted));
   welcomeVoiceButton.setAttribute("aria-label", description);
   welcomeVoiceButton.title = description;
-  document.getElementById("intro")?.classList.toggle("voice-needs-gesture", waiting);
+  // Browser autoplay may require a first tap; keep this fallback invisible.
 }
 function requestWelcomeGesture(message = "🔊 音声ガイドを聞くには画面をタップしてください。") {
   if (!isWelcomeVisible() || welcomeMuted) return;
@@ -1145,7 +1145,7 @@ function stopWelcomeSpeech() {
 function repeatWelcome() {
   if (!welcomeMuted && isWelcomeVisible()) {
     clearTimeout(welcomeRepeatTimer);
-    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 250);
+    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 350);
   }
 }
 function playWelcomeSpeech(fromGesture = false) {
@@ -1251,11 +1251,11 @@ if (welcomeVoiceButton) {
       if (document.hidden) stopWelcomeSpeech();
       else if (!welcomeMuted && isWelcomeVisible()) {
         if (welcomeUnlocked) playWelcomeSpeech();
-        else requestWelcomeGesture();
+        else playWelcomeSpeech();
       }
     });
     window.addEventListener("pageshow", event => {
-      if (event.persisted && !welcomeMuted && isWelcomeVisible()) requestWelcomeGesture();
+      if (event.persisted && !welcomeMuted && isWelcomeVisible()) playWelcomeSpeech();
     });
   }
 }
