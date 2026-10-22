@@ -9,16 +9,38 @@
   "chairperson": "山本 匡",
   "organization": "学校法人 小山学園",
   "categories": {
-    "建築・インテリア": ["建築監督科", "建築科", "インテリア科", "［通信制］建築科／建築士専科"],
-    "AI・IT・ゲーム・Web": ["情報処理科", "IoT＋AI科", "データサイエンス＋AI科", "ゲーム＋デジタルクリエイター科", "Web動画クリエイター科"],
-    "環境・バイオ": ["環境インフラエンジニア科", "バイオテクノロジー科"]
+    "建築・インテリア": [
+      "建築監督科",
+      "建築科",
+      "インテリア科",
+      "［通信制］建築科／建築士専科"
+    ],
+    "AI・IT・ゲーム・Web": [
+      "情報処理科",
+      "IoT＋AI科",
+      "データサイエンス＋AI科",
+      "ゲーム＋デジタルクリエイター科",
+      "Web動画クリエイター科"
+    ],
+    "環境・バイオ": [
+      "環境インフラエンジニア科",
+      "バイオテクノロジー科"
+    ]
   },
   "officialSources": {
     "school": "https://tec.ttc.ac.jp/",
-    "departments": "https://ttc.ac.jp/c_facalty/index.html",
+    "departments": "https://tec.ttc.ac.jp/departments/",
     "openCampus": "https://tec.ttc.ac.jp/open-campus/",
     "internationalStudents": "https://tec.ttc.ac.jp/international_students/",
-    "internationalAdmissions": "https://tec.ttc.ac.jp/entrance/international-students/"
+    "internationalAdmissions": "https://tec.ttc.ac.jp/entrance/international-students/",
+    "schoolGuide": "https://tec.ttc.ac.jp/school/",
+    "access": "https://tec.ttc.ac.jp/school/access/",
+    "tuition": "https://tec.ttc.ac.jp/entrance/expenses/",
+    "admissions": "https://tec.ttc.ac.jp/entrance/schedule/",
+    "internationalScholarships": "https://tec.ttc.ac.jp/entrance/international-students/int-scholarship/",
+    "internationalSupport": "https://tec.ttc.ac.jp/entrance/international-students/support/",
+    "news": "https://tec.ttc.ac.jp/topics/",
+    "association": "https://search.tsk.or.jp/search/viewnl.php?id=110031"
   },
   "answerRules": [
     "Use verified school facts; do not fabricate teacher names, schedules, fees, or festival information.",
@@ -27,5 +49,215 @@
     "Do not confuse 東京テクニカルカレッジ with 東京工科自動車大学校.",
     "Never claim real-time web browsing unless a search or retrieval tool is actually connected.",
     "Respond in the user's language when possible, preserving Japanese names and department titles."
-  ]
+  ],
+  "lastReviewed": "2026-10-22",
+  "scope": "Publicly verifiable official school information; not an exhaustive crawl of every page.",
+  "identity": {
+    "nameJa": "専門学校東京テクニカルカレッジ",
+    "operator": "学校法人 小山学園",
+    "principal": "白井 雅哲",
+    "chairperson": "山本 匡",
+    "foundedSchoolRegistration": "1987-03-27",
+    "studentCapacityReported2026": 900,
+    "internationalStudentsAccepted": true,
+    "schoolType": "工業課程の総合専門学校",
+    "graduatesClaim": "11,000名以上の業界人材を輩出（学校案内掲載）",
+    "source": "https://tec.ttc.ac.jp/school/"
+  },
+  "contact": {
+    "postalCode": "164-8787",
+    "address": "東京都中野区東中野4-2-3",
+    "telephone": "03-3360-8881",
+    "fax": "03-3360-8820",
+    "email": "info@ttc.ac.jp",
+    "admissionsTelephone": "0120-1969-04",
+    "admissionsHours": "平日9:00–19:00（土日祝除く）",
+    "careerEmployerContact": {
+      "telephone": "03-3360-8828",
+      "fax": "03-3360-8860",
+      "email": "t-kikaku@ttc.ac.jp"
+    },
+    "source": "https://tec.ttc.ac.jp/school/"
+  },
+  "access": [
+    {
+      "line": "JR中央・総武線",
+      "station": "東中野駅",
+      "directions": "東口駅前"
+    },
+    {
+      "line": "都営大江戸線",
+      "station": "東中野駅",
+      "directions": "A1出口から徒歩約1分"
+    },
+    {
+      "line": "東京メトロ東西線",
+      "station": "落合駅",
+      "directions": "徒歩約8分"
+    },
+    {
+      "line": "西武新宿線",
+      "station": "中井駅",
+      "directions": "徒歩約13分"
+    }
+  ],
+  "departments": [
+    {
+      "name": "建築監督科",
+      "field": "建築・インテリア",
+      "years": 4
+    },
+    {
+      "name": "建築科",
+      "field": "建築・インテリア",
+      "years": 2
+    },
+    {
+      "name": "インテリア科",
+      "field": "建築・インテリア",
+      "years": 2
+    },
+    {
+      "name": "［通信制］建築科／建築士専科",
+      "field": "建築・インテリア",
+      "years": 2,
+      "note": "通信課程では「留学」の在留資格を取得できない旨の案内あり"
+    },
+    {
+      "name": "情報処理科",
+      "field": "AI・IT・ゲーム・Web",
+      "years": 2
+    },
+    {
+      "name": "IoT+AI科",
+      "field": "AI・IT・ゲーム・Web",
+      "years": 2
+    },
+    {
+      "name": "データサイエンス+AI科",
+      "field": "AI・IT・ゲーム・Web",
+      "years": 2
+    },
+    {
+      "name": "ゲーム+デジタルクリエイター科",
+      "field": "AI・IT・ゲーム・Web",
+      "years": 2
+    },
+    {
+      "name": "Web動画クリエイター科",
+      "field": "AI・IT・ゲーム・Web",
+      "years": 2
+    },
+    {
+      "name": "環境インフラエンジニア科",
+      "field": "環境・バイオ",
+      "years": 2,
+      "opening": "2028-04 (planned)"
+    },
+    {
+      "name": "バイオテクノロジー科",
+      "field": "環境・バイオ",
+      "years": 2
+    }
+  ],
+  "historicalCourseNotice": "建築科（夜間 建築士専科）は2026年度生より募集停止と学科紹介ページに記載。最新の募集状況を要確認。",
+  "tuition": {
+    "reference": "公式サイト掲載の募集年度情報。入学年により変動するため必ず最新ページで確認",
+    "firstYearYen": {
+      "建築監督科": 1465000,
+      "建築科": 1435000,
+      "インテリア科": 1435000,
+      "情報処理科": 1465000,
+      "IoT+AI科": 1465000,
+      "データサイエンス+AI科": 1465000,
+      "ゲーム+デジタルクリエイター科": 1465000,
+      "Web動画クリエイター科": 1465000,
+      "環境インフラエンジニア科": 1475000,
+      "バイオテクノロジー科": 1475000
+    },
+    "paymentSchedule": "年2回、原則3月と9月",
+    "extraCosts": "研修費、PC、教科書、教材、ソフトウェア、保険料等が別途必要",
+    "laptopRequired": true,
+    "source": "https://tec.ttc.ac.jp/entrance/expenses/"
+  },
+  "admissions": {
+    "intakeExample": "2027年度募集要項",
+    "methods": [
+      "AO/総合型選抜",
+      "学校推薦・指定校推薦",
+      "一般入学"
+    ],
+    "capacity2027": {
+      "建築監督科": 30,
+      "建築科": 60,
+      "インテリア科": 40,
+      "情報処理科": 40,
+      "IoT+AI科": 40,
+      "データサイエンス+AI科": 30,
+      "ゲーム+デジタルクリエイター科": 40,
+      "Web動画クリエイター科": 40,
+      "バイオテクノロジー科": 30
+    },
+    "note": "出願資格、期間、定員、必要書類は年度・学科・選考区分により異なる。募集停止や新設予定学科を含め最新ページで確認",
+    "source": "https://tec.ttc.ac.jp/entrance/schedule/"
+  },
+  "internationalStudents": {
+    "admissions": "留学生向け募集要項と在留資格条件を確認",
+    "orientation": "4月に留学生オリエンテーションを実施",
+    "consultation": "留学生相談窓口で学習・生活相談に対応",
+    "careerSupport": "日本国内就職希望者への就職指導",
+    "scholarships": "条件に応じた学費減免・奨学金制度あり。金額・応募条件・日程は最新ページで確認",
+    "sources": [
+      "https://tec.ttc.ac.jp/entrance/international-students/",
+      "https://tec.ttc.ac.jp/entrance/international-students/support/",
+      "https://tec.ttc.ac.jp/entrance/international-students/int-scholarship/"
+    ]
+  },
+  "studentLifeAndSupport": {
+    "topics": [
+      "教育理念",
+      "学校の歴史",
+      "学科紹介",
+      "施設紹介",
+      "実習重視の教育",
+      "就職支援",
+      "資格取得",
+      "オープンキャンパス",
+      "学園祭・学校行事",
+      "卒業生・在校生の声",
+      "公式SNS"
+    ],
+    "openCampus": "日程・対象学科・申込方法は公式オープンキャンパスページで確認",
+    "latestNews": "新着情報は公式TOPICSを確認",
+    "sources": [
+      "https://tec.ttc.ac.jp/school/",
+      "https://tec.ttc.ac.jp/open-campus/",
+      "https://tec.ttc.ac.jp/topics/"
+    ]
+  },
+  "teacherAndStaff": {
+    "publicNamesNotExhaustive": true,
+    "policy": "教員名簿・担当科目・担任・時間割は公式公開資料にある場合だけ回答する。非公開の情報や年度ごとの担当者を推測しない。",
+    "principal": "白井 雅哲",
+    "source": "https://search.tsk.or.jp/search/viewnl.php?id=110031"
+  },
+  "dynamicInfoRequiresLiveVerification": [
+    "各先生の担当科目と在籍",
+    "学園祭の日程・ブース・出演者",
+    "今日の授業と教室",
+    "オープンキャンパスの空席・日程",
+    "募集受付状況",
+    "奨学金締切",
+    "学費改定",
+    "最新ニュース"
+  ],
+  "integrationNotes": {
+    "status": "Knowledge file only; does not automatically connect to Cloudflare Worker or perform live search",
+    "suggestedBackend": "Cloudflare Worker retrieves relevant trusted pages server-side, extracts text, adds source URL and retrieval date, and supplies excerpts to Gemini. Use caching, allowlisted hosts, size/time limits, and no private student data.",
+    "allowlistedDomains": [
+      "tec.ttc.ac.jp",
+      "search.tsk.or.jp"
+    ],
+    "languagePolicy": "Japanese, Bengali, English; keep proper nouns in Japanese"
+  }
 }
