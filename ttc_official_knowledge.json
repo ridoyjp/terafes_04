@@ -1,0 +1,31 @@
+{
+  "school": "専門学校東京テクニカルカレッジ",
+  "officialWebsite": "https://tec.ttc.ac.jp/",
+  "address": "〒164-8787 東京都中野区東中野4-2-3",
+  "telephone": "03-3360-8881",
+  "admissionsPhone": "0120-1969-04",
+  "admissionsEmail": "info@ttc.ac.jp",
+  "principal": "白井 雅哲",
+  "chairperson": "山本 匡",
+  "organization": "学校法人 小山学園",
+  "categories": {
+    "建築・インテリア": ["建築監督科", "建築科", "インテリア科", "［通信制］建築科／建築士専科"],
+    "AI・IT・ゲーム・Web": ["情報処理科", "IoT＋AI科", "データサイエンス＋AI科", "ゲーム＋デジタルクリエイター科", "Web動画クリエイター科"],
+    "環境・バイオ": ["環境インフラエンジニア科", "バイオテクノロジー科"]
+  },
+  "officialSources": {
+    "school": "https://tec.ttc.ac.jp/",
+    "departments": "https://ttc.ac.jp/c_facalty/index.html",
+    "openCampus": "https://tec.ttc.ac.jp/open-campus/",
+    "internationalStudents": "https://tec.ttc.ac.jp/international_students/",
+    "internationalAdmissions": "https://tec.ttc.ac.jp/entrance/international-students/"
+  },
+  "answerRules": [
+    "Use verified school facts; do not fabricate teacher names, schedules, fees, or festival information.",
+    "For faculty members and teachers, cite a relevant official department page when a name is publicly listed; otherwise say it cannot be confirmed.",
+    "For dates, tuition, application requirements, and events, check the current official page before answering.",
+    "Do not confuse 東京テクニカルカレッジ with 東京工科自動車大学校.",
+    "Never claim real-time web browsing unless a search or retrieval tool is actually connected.",
+    "Respond in the user's language when possible, preserving Japanese names and department titles."
+  ]
+}
