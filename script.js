@@ -1099,6 +1099,8 @@ const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジの�
   "マイクは日本語の音声入力に対応しています。文字入力ではローマ字や、さまざまな言語でも質問できます。" +
   "さあ、一緒にがくえんさいを楽しみましょう！";
 
+const WELCOME_SPEECH_REPEAT = WELCOME_SPEECH.replace(/^こんにちは！/, "");
+let welcomeCompletedCycles = 0;
 const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 let welcomeMuted = false;
 let welcomeUtterance = null;
@@ -1114,7 +1116,7 @@ function isWelcomeVisible() {
     !document.getElementById("chat").classList.contains("active");
 }
 function welcomeStatus(message) {
-  // No on-screen sound-on notice or permission message.
+  if (welcomeVoiceHint) welcomeVoiceHint.textContent = message;
 }
 function updateWelcomeButton() {
   if (!welcomeVoiceButton) return;
@@ -1124,7 +1126,7 @@ function updateWelcomeButton() {
   welcomeVoiceButton.setAttribute("aria-pressed", String(welcomeMuted));
   welcomeVoiceButton.setAttribute("aria-label", description);
   welcomeVoiceButton.title = description;
-  // Browser autoplay may require a first tap; keep this fallback invisible.
+  document.getElementById("intro")?.classList.toggle("voice-needs-gesture", waiting);
 }
 function requestWelcomeGesture(message = "🔊 音声ガイドを聞くには画面をタップしてください。") {
   if (!isWelcomeVisible() || welcomeMuted) return;
@@ -1145,7 +1147,7 @@ function stopWelcomeSpeech() {
 function repeatWelcome() {
   if (!welcomeMuted && isWelcomeVisible()) {
     clearTimeout(welcomeRepeatTimer);
-    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 350);
+    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 500);
   }
 }
 function playWelcomeSpeech(fromGesture = false) {
@@ -1155,7 +1157,7 @@ function playWelcomeSpeech(fromGesture = false) {
   updateWelcomeButton();
 
   const synth = window.speechSynthesis;
-  const utterance = new SpeechSynthesisUtterance(WELCOME_SPEECH);
+  const utterance = new SpeechSynthesisUtterance(welcomeCompletedCycles ? WELCOME_SPEECH_REPEAT : WELCOME_SPEECH);
   welcomeUtterance = utterance;
   utterance.lang = "ja-JP";
   utterance.rate = JAPANESE_VOICE_RATE;
@@ -1163,6 +1165,7 @@ function playWelcomeSpeech(fromGesture = false) {
   utterance.volume = 1;
   const jaVoice = getPinnedJapaneseVoice();
   if (jaVoice) utterance.voice = jaVoice;
+  // Robot remains upright: no bow animation.
   utterance.onstart = () => {
     if (welcomeUtterance !== utterance) return;
     welcomeStarted = true;
@@ -1177,6 +1180,7 @@ function playWelcomeSpeech(fromGesture = false) {
     welcomeUtterance = null;
     welcomeStarted = false;
     welcomeRobot?.classList.remove("is-speaking");
+    welcomeCompletedCycles += 1;
     repeatWelcome();
   };
   utterance.onerror = (event) => {
@@ -1250,8 +1254,7 @@ if (welcomeVoiceButton) {
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) stopWelcomeSpeech();
       else if (!welcomeMuted && isWelcomeVisible()) {
-        if (welcomeUnlocked) playWelcomeSpeech();
-        else playWelcomeSpeech();
+        playWelcomeSpeech(); // try again on tab return; browser may require a tap
       }
     });
     window.addEventListener("pageshow", event => {

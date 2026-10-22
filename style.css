@@ -579,3 +579,13 @@ select {
 @media(max-width:560px){.intro .welcome-robot-stage{width:min(42vw,200px);max-height:30dvh}}
 @media(max-height:640px){.intro .welcome-robot-stage{width:min(19vh,135px);max-height:24dvh}}
 @media(prefers-reduced-motion:reduce){.intro .welcome-robot-stage,.robot-eye-glow,.robot-mouth-glow,.robot-speech-rings{animation:none!important}}
+
+/* TTC Robot: bow for each speech cycle, eye blink and approximate talking glow. */
+.intro .welcome-robot-stage.is-bowing {animation:ttcRobotBow 1.15s ease-in-out 1 both;}
+@keyframes ttcRobotBow {0%,100%{transform:rotate(0deg) translateY(0)} 38%,65%{transform:rotate(13deg) translateY(9px)} }
+.welcome-robot-stage:not(.is-speaking) .robot-eye-glow {animation:robotEyePulse 2.8s ease-in-out infinite alternate, ttcBlink 5s ease-in-out infinite;}
+@keyframes ttcBlink {0%,43%,47%,100%{scale:1 1}45%{scale:1 .1}}
+@media(prefers-reduced-motion:reduce){.intro .welcome-robot-stage.is-bowing,.welcome-robot-stage:not(.is-speaking) .robot-eye-glow{animation:none!important}}
+
+/* No bow: robot gently floats, blinks and lip-syncs only. */
+.intro .welcome-robot-stage.is-bowing { animation: none !important; }
