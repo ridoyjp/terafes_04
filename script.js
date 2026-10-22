@@ -1077,6 +1077,19 @@ if (!("speechSynthesis" in window)) {
 // IMPORTANT: browsers may prohibit audible autoplay without user interaction.
 // Never claim to bypass that policy. Instead offer a reliable first-tap action.
 const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
+const welcomeRobot = document.getElementById("welcomeRobot");
+// Pointer movement adds a small eye-glow shift; no camera or face tracking.
+if (welcomeRobot) {
+  welcomeRobot.addEventListener("pointermove", (event) => {
+    const r = welcomeRobot.getBoundingClientRect();
+    welcomeRobot.style.setProperty("--eye-shift-x", `${Math.max(-4, Math.min(4, ((event.clientX-r.left)/r.width-.5)*8))}px`);
+    welcomeRobot.style.setProperty("--eye-shift-y", `${Math.max(-3, Math.min(3, ((event.clientY-r.top)/r.height-.5)*6))}px`);
+  });
+  welcomeRobot.addEventListener("pointerleave", () => {
+    welcomeRobot.style.setProperty("--eye-shift-x", "0px");
+    welcomeRobot.style.setProperty("--eye-shift-y", "0px");
+  });
+}
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 console.info("[TTC Voice Version] welcome-autoplay-gesture-v4");
 const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジのがくえんさいへようこそ！" +
@@ -1126,6 +1139,7 @@ function stopWelcomeSpeech() {
   welcomeStartTimer = null;
   welcomeUtterance = null; // invalidate callbacks before cancel
   welcomeStarted = false;
+  welcomeRobot?.classList.remove("is-speaking");
   if (canSpeakWelcome) window.speechSynthesis.cancel();
 }
 function repeatWelcome() {
@@ -1152,6 +1166,7 @@ function playWelcomeSpeech(fromGesture = false) {
   utterance.onstart = () => {
     if (welcomeUtterance !== utterance) return;
     welcomeStarted = true;
+    welcomeRobot?.classList.add("is-speaking");
     welcomePendingGesture = false;
     clearTimeout(welcomeStartTimer);
     welcomeStatus("音声ガイドを再生しています。🔊");
@@ -1161,6 +1176,7 @@ function playWelcomeSpeech(fromGesture = false) {
     if (welcomeUtterance !== utterance) return;
     welcomeUtterance = null;
     welcomeStarted = false;
+    welcomeRobot?.classList.remove("is-speaking");
     repeatWelcome();
   };
   utterance.onerror = (event) => {
@@ -1168,6 +1184,7 @@ function playWelcomeSpeech(fromGesture = false) {
     clearTimeout(welcomeStartTimer);
     welcomeUtterance = null;
     welcomeStarted = false;
+    welcomeRobot?.classList.remove("is-speaking");
     if (event.error === "interrupted" || event.error === "canceled") return;
     // "not-allowed" is a legitimate autoplay restriction, not a worker failure.
     console.info("[TTC Welcome Voice] Speech unavailable:", event.error);

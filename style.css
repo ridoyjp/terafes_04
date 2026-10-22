@@ -548,3 +548,34 @@ select {
   border-radius:12px !important; text-align:center !important; font-size:13px !important;
   pointer-events:none !important; box-shadow:0 4px 18px rgba(0,0,0,.2);
 }
+
+/* TTC welcome mascot: supplied robot artwork + lightweight eye and talking overlays. */
+.intro .welcome-robot-stage {
+  position:relative;flex:0 1 auto;width:clamp(145px,19vw,245px);
+  max-height:35dvh;aspect-ratio:484/640;margin:0 auto 6px;
+  filter:drop-shadow(0 14px 20px #001b4055);
+  animation:robotFloat 4s ease-in-out infinite;
+  --eye-shift-x:0px;--eye-shift-y:0px;
+}
+.welcome-robot-picture {width:100%;height:100%;object-fit:contain;display:block;user-select:none;pointer-events:none}
+.robot-eye-glow {position:absolute;top:31.2%;width:9.1%;height:4.7%;border-radius:50%;
+  background:#61f9ff77;box-shadow:0 0 13px 5px #44eeff70;pointer-events:none;
+  transform:translate(var(--eye-shift-x),var(--eye-shift-y));
+  animation:robotEyePulse 2.8s ease-in-out infinite alternate;
+}
+.robot-eye-left {left:32.0%}.robot-eye-right {left:59.2%}
+.robot-mouth-glow {position:absolute;left:46.6%;top:37.2%;width:7%;height:2.7%;
+  border-radius:30% 30% 70% 70%;background:#4af6ff99;
+  box-shadow:0 0 12px 3px #5cfaff88;opacity:.15;pointer-events:none}
+.robot-speech-rings {position:absolute;inset:9% 8% 24%;border:2px solid #6ff8ff70;
+  border-radius:45%;opacity:0;pointer-events:none}
+.welcome-robot-stage.is-speaking .robot-eye-glow {animation:robotEyeTalking .65s ease-in-out infinite alternate}
+.welcome-robot-stage.is-speaking .robot-mouth-glow {opacity:1;animation:robotMouthTalking .24s ease-in-out infinite alternate}
+.welcome-robot-stage.is-speaking .robot-speech-rings {animation:robotSpeechRing 1.5s ease-out infinite}
+@keyframes robotEyePulse {from{opacity:.28;filter:brightness(.9)}to{opacity:.8;filter:brightness(1.5)}}
+@keyframes robotEyeTalking {from{opacity:.5;filter:brightness(1)}to{opacity:1;filter:brightness(2)}}
+@keyframes robotMouthTalking {from{transform:scaleY(.45);opacity:.35}to{transform:scaleY(1.7);opacity:1}}
+@keyframes robotSpeechRing {0%{transform:scale(.85);opacity:.45}100%{transform:scale(1.2);opacity:0}}
+@media(max-width:560px){.intro .welcome-robot-stage{width:min(42vw,200px);max-height:30dvh}}
+@media(max-height:640px){.intro .welcome-robot-stage{width:min(19vh,135px);max-height:24dvh}}
+@media(prefers-reduced-motion:reduce){.intro .welcome-robot-stage,.robot-eye-glow,.robot-mouth-glow,.robot-speech-rings{animation:none!important}}

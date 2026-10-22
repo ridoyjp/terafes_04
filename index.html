@@ -6,35 +6,19 @@
   <meta name="theme-color" content="#0b2948">
   <meta name="description" content="TTC 学園祭 2026 AI Chat Bot。フード、ゲーム、ステージ、会場案内について質問できる、音声対応のAIチャットガイドです。">
   <title>TTC 学園祭 2026 | AIチャットボット</title>
-  <link rel="stylesheet" href="style.css?v=20261022-welcome-autoplay-v4">
+  <link rel="stylesheet" href="style.css?v=20261022-robot-welcome-v1">
 </head>
 <body>
   <!-- Landing page; existing CSS and JS selectors are preserved. -->
   <section class="intro" id="intro" aria-label="AI Chat Bot スタート画面">
     <img class="intro-logo" id="introLogo" alt="TTC 学園祭 2026 ロゴ" src="assets/festival-logo.webp">
-    <svg class="robot" role="img" aria-label="笑顔のAIチャットボット" viewBox="0 0 250 245" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="shell" x2=".9" y2="1"><stop stop-color="#f4fdff"/><stop offset="1" stop-color="#9de4f4"/></linearGradient>
-        <linearGradient id="face" x2="0" y2="1"><stop stop-color="#164b7c"/><stop offset="1" stop-color="#082c56"/></linearGradient>
-      </defs>
-      <rect fill="#d7f8ff" height="69" rx="14" width="29" x="23" y="63"/>
-      <rect fill="#135b94" height="49" rx="8" width="17" x="29" y="72"/>
-      <rect fill="#d7f8ff" height="69" rx="14" width="29" x="198" y="63"/>
-      <rect fill="#135b94" height="49" rx="8" width="17" x="204" y="72"/>
-      <rect fill="url(#shell)" height="171" rx="80" stroke="#6ecce7" stroke-width="9" width="166" x="42" y="45"/>
-      <rect fill="url(#face)" height="90" rx="42" stroke="#287dab" stroke-width="7" width="128" x="61" y="76"/>
-      <circle cx="97" cy="118" fill="#60eee9" r="9"/>
-      <circle cx="153" cy="118" fill="#60eee9" r="9"/>
-      <path d="M98 129 Q125 153 153 129" fill="none" stroke="#60eee9" stroke-linecap="round" stroke-width="8"/>
-      <rect fill="#e7fbff" height="61" rx="29" width="116" x="67" y="152"/>
-      <path d="M125 163 l6 13 13 6 -13 6 -6 13 -6 -13 -13 -6 13 -6z" fill="#09a4d3"/>
-      <rect fill="#e4faff" height="37" rx="9" width="35" x="2" y="115"/>
-      <text fill="#1689bb" font-size="21" text-anchor="middle" x="19" y="141">⚙</text>
-      <rect fill="#e4faff" height="37" rx="9" width="36" x="210" y="144"/>
-      <text fill="#1689bb" font-size="21" text-anchor="middle" x="228" y="169">✉</text>
-      <rect fill="#e4faff" height="40" rx="11" width="43" x="186" y="8"/>
-      <text fill="#1689bb" font-size="24" text-anchor="middle" x="207" y="35">•••</text>
-    </svg>
+    <div class="welcome-robot-stage" id="welcomeRobot" role="img" aria-label="笑顔でお迎えする、がくえんさいAIロボット">
+      <img class="welcome-robot-picture" src="assets/welcome-robot.png" alt="" draggable="false">
+      <span class="robot-eye-glow robot-eye-left" aria-hidden="true"></span>
+      <span class="robot-eye-glow robot-eye-right" aria-hidden="true"></span>
+      <span class="robot-mouth-glow" aria-hidden="true"></span>
+      <span class="robot-speech-rings" aria-hidden="true"></span>
+    </div>
     <h1>学園祭 AI</h1>
     <p>学園祭をもっと楽しく。気になる情報をAIチャットで簡単にチェック！</p>
     <button class="start" id="startButton" type="button">チャットを始める →</button>
@@ -122,6 +106,6 @@
     </div>
   </main>
   <script src="config.js?v=20261022-jp-ux1"></script>
-  <script src="script.js?v=20261022-welcome-autoplay-v4"></script>
+  <script src="script.js?v=20261022-robot-welcome-v1"></script>
 </body>
 </html>
