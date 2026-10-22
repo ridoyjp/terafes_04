@@ -667,7 +667,7 @@ async function processRecording(blob) {
     nativeDictation("⚠️ AI音声認識のURLがありません。キーボードのマイクを使用してください。"); return;
   }
   if (japaneseFastSucceeded) return;
-  voiceMessage("🌍 言語を自動判定して文字に変換しています…");
+  voiceMessage("🎙️ 日本語の音声を文字に変換しています…");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   const transcriptionStartedAt = performance.now();
@@ -675,7 +675,7 @@ async function processRecording(blob) {
     const audio = await toBase64(blob);
     // Report exact endpoint and network problems without exposing audio or API keys.
     // A browser TypeError/Failed to fetch means the request did not provide an HTTP response.
-    const payload = JSON.stringify({ audio, mimeType: blob.type || "audio/webm" });
+    const payload = JSON.stringify({ audio, mimeType: blob.type || "audio/webm", language: "ja-JP" });
     let response;
     try {
       response = await fetch(TRANSCRIBE_API_URL, {
@@ -710,7 +710,7 @@ async function processRecording(blob) {
     if (autoSendRecording && !document.getElementById("chat").classList.contains("active")) {
       input.value = question; // Never send when the visitor has left the chat.
     } else if (autoSendRecording) {
-      void ask(question);
+      void ask(question, "ja-JP");
     } else {
       input.value = question;
     }
@@ -794,32 +794,56 @@ async function startRecording() {
       "⚠️ 録音できませんでした。キーボードのマイクも使えます。");
   }
 }
-// Chat microphone: Japanese-only and browser-native for minimum latency.
-// No parallel MediaRecorder/Gemini upload when Japanese recognition is supported.
+// ---------- JAPANESE-FIRST FAST VOICE INPUT ----------
+// Japanese Web Speech runs first for low latency. If browser STT is missing or
+// has a service/network failure, Japanese Gemini audio transcription is an
+// explicit fallback. The fallback can be slower and needs microphone access.
 let japaneseOnlyListening = false;
 let japaneseOnlyTranscript = "";
+let japaneseVoiceSession = 0;
+let speechRecognitionFailures = 0;
+
 function finishJapaneseOnlyVoice(sendQuestion) {
   const transcript = japaneseOnlyTranscript.trim();
   japaneseOnlyTranscript = "";
   japaneseOnlyListening = false;
-  setListening(false);
+  const active = recognition;
   recognition = null;
+  if (active) {
+    active.onresult = null;
+    active.onerror = null;
+    active.onend = null;
+    try { active.abort(); } catch (_) {}
+  }
+  setListening(false);
   if (!sendQuestion || !transcript || pendingChat) {
     if (!transcript && sendQuestion) voiceMessage("⚠️ 日本語を認識できませんでした。もう一度お試しください。");
     return;
   }
+  speechRecognitionFailures = 0;
   const question = (input.value.trim() ? input.value.trim() + " " : "") + transcript;
   input.value = "";
-  voiceMessage("✅ 日本語を認識しました。送信しています…");
+  voiceMessage("✅ 日本語を認識しました。質問を送信しています…");
   if (document.getElementById("chat")?.classList.contains("active")) void ask(question, "ja-JP");
   else input.value = question;
 }
+
+function japaneseAudioFallback(message = "🎙️ 日本語の録音に切り替えます。話し終えたら自動送信します。") {
+  if (pendingChat || recordingBusy || !document.getElementById("chat")?.classList.contains("active")) return;
+  voiceMessage(message);
+  // Safari may require user activation for the recording permission. If it
+  // cannot start, the user receives a Japanese error and can use keyboard mic.
+  unlockAudioFromTap();
+  void startRecording();
+}
+
 function startJapaneseOnlyVoice() {
-  if (pendingChat || japaneseOnlyListening) return;
-  if (!BrowserSpeechRecognition) {
-    voiceMessage("⚠️ このブラウザーは日本語の音声入力に対応していません。Chromeなどの対応ブラウザーか、キーボードの音声入力をお使いください。");
+  if (pendingChat || japaneseOnlyListening || recordingBusy) return;
+  if (!BrowserSpeechRecognition || speechRecognitionFailures >= 2) {
+    japaneseAudioFallback("🎙️ 日本語の音声を録音します。話し終えたら自動送信します。");
     return;
   }
+  const session = ++japaneseVoiceSession;
   try {
     window.speechSynthesis?.cancel();
     const r = new BrowserSpeechRecognition();
@@ -830,43 +854,70 @@ function startJapaneseOnlyVoice() {
     r.interimResults = true;
     r.continuous = false;
     r.maxAlternatives = 1;
-    r.onresult = (event) => {
+    r.onresult = event => {
+      if (recognition !== r || session !== japaneseVoiceSession) return;
+      let finalText = "";
+      let interimText = "";
       for (let i = 0; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          japaneseOnlyTranscript = String(event.results[i][0]?.transcript || "").trim();
-        }
+        const segment = String(event.results[i][0]?.transcript || "").trim();
+        if (event.results[i].isFinal) finalText += segment;
+        else interimText += segment;
+      }
+      if (finalText) {
+        japaneseOnlyTranscript = finalText;
+        // Send as soon as a final transcript exists; don't wait for onend.
+        finishJapaneseOnlyVoice(true);
+      } else if (interimText) {
+        voiceMessage("🎙️ 聞き取り中: " + interimText.slice(0, 90));
       }
     };
-    r.onerror = (event) => {
-      if (recognition !== r) return;
+    r.onerror = event => {
+      if (recognition !== r || session !== japaneseVoiceSession) return;
+      const error = event?.error || "unknown";
       japaneseOnlyListening = false;
       recognition = null;
-      setListening(false);
       japaneseOnlyTranscript = "";
-      const error = event?.error || "unknown";
-      voiceMessage(error === "not-allowed" || error === "service-not-allowed"
-        ? "⚠️ マイクの使用を許可してください。"
-        : "⚠️ 日本語の音声認識が利用できません。もう一度お試しください。");
+      setListening(false);
+      r.onend = null;
+      // A denied microphone permission must not trigger a second permission
+      // prompt. A provider failure can fall back to Japanese audio upload.
+      if (error === "not-allowed" || error === "audio-capture") {
+        voiceMessage("⚠️ マイクへのアクセスを許可してください。端末のキーボード音声入力も使えます。");
+      } else if (error === "no-speech" || error === "aborted") {
+        voiceMessage("⚠️ 声を確認できませんでした。もう一度マイクを押して話してください。");
+      } else {
+        speechRecognitionFailures += 1;
+        japaneseAudioFallback("🎙️ ブラウザーの音声認識が利用できないため、日本語録音を試します。");
+      }
     };
     r.onend = () => {
-      if (recognition !== r) return;
-      finishJapaneseOnlyVoice(true);
+      if (recognition !== r || session !== japaneseVoiceSession) return;
+      if (japaneseOnlyTranscript.trim()) finishJapaneseOnlyVoice(true);
+      else {
+        japaneseOnlyListening = false;
+        recognition = null;
+        setListening(false);
+        voiceMessage("⚠️ 日本語の音声を認識できませんでした。もう一度お試しください。");
+      }
     };
     r.start();
     setListening(true);
-    voiceMessage("🎙️ 日本語で話してください。話し終えると自動送信します。");
-  } catch (error) {
+    voiceMessage("🎙️ 日本語で話してください。話し終えたら自動送信します。");
+  } catch (_) {
     japaneseOnlyListening = false;
     recognition = null;
     setListening(false);
-    voiceMessage("⚠️ 日本語の音声入力を開始できませんでした。");
+    speechRecognitionFailures += 1;
+    japaneseAudioFallback();
   }
 }
+
 if (micButton) {
   micButton.disabled = false;
   micButton.addEventListener("click", () => {
-    if (japaneseOnlyListening && recognition) {
-      // Manual stop triggers onend and sends the last final Japanese result.
+    if (recordingBusy) {
+      stopRecording(); // manual stop for server-fallback recording
+    } else if (japaneseOnlyListening && recognition) {
       try { recognition.stop(); } catch (_) { finishJapaneseOnlyVoice(false); }
     } else {
       startJapaneseOnlyVoice();
@@ -949,6 +1000,13 @@ function speakAnswer(text, languageHint = "") {
   utterance.lang = locale;
 
   const isJapanese = locale.toLowerCase().startsWith("ja");
+  // Pronunciation-only replacements: keep visible school text in normal kanji.
+  // Browsers sometimes read 学園祭 with a different on-device voice reading.
+  if (isJapanese) {
+    utterance.text = cleanText
+      .replace(/学園祭\s*(?:AI|ＡＩ)/gi, "がくえんさい、エーアイ")
+      .replace(/学園祭/g, "がくえんさい");
+  }
   utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 0.97;
   utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1.0;
   utterance.volume = 1;
@@ -1022,12 +1080,12 @@ if (!("speechSynthesis" in window)) {
 const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 // Gakuensai AI: pronounce the name consistently as がくえんさいエーアイ.
-console.info("[TTC Voice Version] gakuensai-fixed-20261021-3");
+console.info("[TTC Voice Version] 20261022-japanese-ux-voice3");
 const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジのがくえんさいへようこそ！" +
-  "私は、がくえんさいエーアイです。皆さんをサポートするチャットボットです！" +
+  "私は、がくえんさい、エーアイです。皆さんをサポートするチャットボットです！" +
   "がくえんさいのイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +
   "学校や学科についての質問にもお答えします。" +
-  "文字でも音声でも質問でき、日本語のローマ字入力や、さまざまな言語にも対応しています。" +
+  "マイクは日本語の音声入力に対応しています。文字入力ではローマ字や、さまざまな言語でも質問できます。" +
   "さあ、一緒にがくえんさいを楽しみましょう！";
 
 const canSpeakWelcome = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;

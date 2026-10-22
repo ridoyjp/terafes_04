@@ -39,6 +39,8 @@
   "lost_and_found": "",
   "photo_policy": "",
   "contact_on_day": "",
-  "status": "DRAFT - not approved or imported into Worker; enter real information after teacher verification",
-  "publication_rule": "Do not add unverified information, personal contact information, or invented prices/room numbers"
+  "status": "DRAFT",
+  "publication_rule": "2026 details are published only when status is APPROVED, approved_by and last_verified are filled. Never enter personal secrets, invented prices, or unverifiable details.",
+  "source_url": "",
+  "source_reference": ""
 }

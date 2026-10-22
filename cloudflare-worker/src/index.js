@@ -1,4 +1,5 @@
 import { SCHOOL_DATA } from "./school-data.js";
+import { FESTIVAL_DATA } from "./festival-data.js";
 
 
 /*
@@ -25,13 +26,12 @@ const SYSTEM_TEXT = `
 - わかりやすく、親切に説明してください。
 - 事実が不明な場合は推測で断定しないでください。
 
-【確認済みの学園祭情報】
-フード、ゲーム・体験、ステージ、会場ガイドの
-カテゴリーがあります。
-
-開催日時、価格、場所、出演者などの詳細は未提供です。
-不明な学園祭情報は学校の公式案内またはスタッフに
-確認するよう案内してください。
+【学園祭の情報源ポリシー】
+学園祭2026については、システムに付与される【2026年 学園祭・先生承認データ】だけを最新の確定情報と見なしてください。
+その情報にない開催日時、価格、教室番号、出店、出演者、トイレ場所等を作らないでください。
+「情報未確認」と伝え、学校の公式案内・担当スタッフに確認するよう案内してください。
+参考として2025年の行事について聞かれた時だけ、【2025年の参考実績】を使い、2026年と取り違えないでください。
+未確認の情報を肯定的に断言しないでください。
 
 回答は基本的に簡潔にしてください。
 東京テクニカルカレッジについては追加された学校確認資料を優先し、学園祭の未確認事項を作り話で埋めないでください。
@@ -66,6 +66,24 @@ function getRelevantSchoolData(message, history) {
     }
   }
   return '【学校確認資料（2026-10-19時点）】\n'+selected.slice(0,9).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source||'未提供（学園祭担当教員に確認）'}`).join('\n\n');
+}
+
+// Teacher-reviewed 2026 festival information. Draft records must NEVER be
+// presented to visitors as confirmed facts. Generated from the teacher JSON.
+function getApprovedFestivalContext(message) {
+  const q = String(message || "").toLowerCase();
+  const festivalKeywords = /学園祭|文化祭|フェス|祭り|gakuensai|festival|matsuri|フード|屋台|ゲーム|ステージ|会場|トイレ|タイムテーブル|event|stage|food|game|map|fest|উৎসব|মেলা/i;
+  if (!festivalKeywords.test(q)) return "";
+  const approved = FESTIVAL_DATA.status === "APPROVED" &&
+    Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
+  const official2026 = approved
+    ? JSON.stringify(FESTIVAL_DATA, null, 2).slice(0, 9000)
+    : "【2026年 学園祭・先生承認データ】未提供・未承認。2026年の詳細は確定情報として回答しない。";
+  const historical = `【2025年の参考実績（2026年の予定ではありません）】
+2025年10月25日にTTC Festival 2025を実施。学校公式告知では学生企画の体験、作品展示、出店などを紹介しています。
+出典: https://tec.ttc.ac.jp/news/nid14607/（2025.10.01掲載）。
+2026年の出店や日時を2025年から推測してはいけません。`;
+  return official2026 + "\n\n" + historical;
 }
 
 function corsHeaders(origin) {
@@ -141,6 +159,7 @@ export default {
         return json({ error: "Invalid audio data or audio type" }, 400, headers);
       }
       const model = String(env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash").trim();
+      const japaneseOnly = voiceData?.language === "ja-JP";
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 28000);
       try {
@@ -151,7 +170,9 @@ export default {
             headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
             body: JSON.stringify({
               contents: [{ role: "user", parts: [
-                { text: "Transcribe the spoken audio exactly in the ORIGINAL spoken language and ORIGINAL writing system. Automatically identify language from the audio, including Bengali, Japanese, English, Nepali, Burmese, Chinese, Hindi and other languages. Do not translate or answer the speech. Return only the transcript, without explanations or labels. If silent/unintelligible, return an empty response." },
+                { text: japaneseOnly
+                    ? "Transcribe this Japanese speech in standard Japanese writing (kanji, hiragana and katakana). Never translate or answer. Return ONLY the spoken Japanese words. If silent or unintelligible return an empty response."
+                    : "Transcribe the spoken audio exactly in the ORIGINAL spoken language and ORIGINAL writing system. Automatically identify language. Do not translate or answer the speech. Return only the transcript, without explanations or labels. If silent/unintelligible, return an empty response." },
                 { inlineData: { mimeType: cleanedType, data: audio } }
               ] }],
               generationConfig: { temperature: 0, maxOutputTokens: 1400 }
@@ -235,6 +256,24 @@ export default {
     };
     const romajiJapanese = isJapaneseRomaji(message);
     const effectiveResponseLanguage = romajiJapanese ? "ja-JP" : responseLanguage;
+    // When official 2026 data is missing, answer common exact festival-detail
+    // questions deterministically instead of asking a model to guess dates,
+    // prices, floor numbers or food menus. Also saves a Gemini request.
+    const approved2026 = FESTIVAL_DATA.status === "APPROVED" &&
+      Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
+    const refersTo2025 = /2025|昨年|去年|last year|previous year|গত বছর/i.test(message);
+    const isFestivalSpecific = /学園祭|文化祭|がくえんさい|gakuensai|gakusai|matsuri|学校祭|フェスティバル|school festival|ttc festival|উৎসব|মেলা|festival/i.test(message);
+    const isFestivalQuickTopic = /^(おすすめは何ですか|食べ物はどこですか|ゲームはありますか|ステージについて教えて|会場の場所を教えて|開催時間を教えて|トイレはどこですか)/.test(message);
+    const seeksSpecifics = /いつ|日時|日付|何時|時間|値段|料金|価格|いくら|どこ|場所|何階|教室|マップ|地図|予定|出店|屋台|食品|食べ物|フード|ゲーム|ステージ|会場|内容|スケジュール|タイムテーブル|おすすめ|トイレ|受付|日程|start|when|where|date|time|price|food|stall|map|game|stage|schedule|cost|location|event|কবে|কোথায়|দাম|সময়|খাবার/i.test(message);
+    if (!approved2026 && !refersTo2025 && ((isFestivalSpecific && seeksSpecifics) || isFestivalQuickTopic)) {
+      const lang = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US");
+      const reply = lang === "bn-BD"
+        ? "২০২৬ সালের TTC 学園祭-এর নির্দিষ্ট সময়, খাবারের স্টল, দাম ও কক্ষের তথ্য এখনও স্কুল থেকে অনুমোদিত নয়। অনুগ্রহ করে স্কুলের অফিসিয়াল ঘোষণা বা আয়োজক শিক্ষকের সঙ্গে নিশ্চিত করুন।"
+        : lang === "en-US"
+          ? "The 2026 TTC Festival schedule, food stalls, prices and room details have not yet been confirmed by the school. Please check the school's official announcements or festival staff."
+          : "2026年の学園祭の開催日時、出店、価格、教室などの詳細は、現在学校から確認が取れていません。学校の公式案内または担当の先生にご確認ください。";
+      return json({ reply, informationStatus: "UNVERIFIED_2026" }, 200, headers);
+    }
     const targetLanguage = LANGUAGE_NAMES[effectiveResponseLanguage] || "the language of the latest user message";
     const languageRule = `
 CRITICAL OUTPUT LANGUAGE POLICY:
@@ -300,7 +339,7 @@ Your final answer should directly address the latest question; no unrelated fest
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getRelevantSchoolData(message, history) }]
+            parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getApprovedFestivalContext(message) + "\n\n" + getRelevantSchoolData(message, history) }]
           },
           contents,
           generationConfig: {

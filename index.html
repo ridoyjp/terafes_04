@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b2948">
   <meta name="description" content="TTC 学園祭 2026 AI Chat Bot。フード、ゲーム、ステージ、会場案内について質問できる、音声対応のAIチャットガイドです。">
-  <title>TTC 学園祭 2026 | AI Chat Bot</title>
-  <link rel="stylesheet" href="style.css?v=20261019-voice2">
+  <title>TTC 学園祭 2026 | AIチャットボット</title>
+  <link rel="stylesheet" href="style.css?v=20261022-jp-ux1">
 </head>
 <body>
   <!-- Landing page; existing CSS and JS selectors are preserved. -->
@@ -35,9 +35,9 @@
       <rect fill="#e4faff" height="40" rx="11" width="43" x="186" y="8"/>
       <text fill="#1689bb" font-size="24" text-anchor="middle" x="207" y="35">•••</text>
     </svg>
-    <h1>AI Chat Bot</h1>
+    <h1>学園祭 AI</h1>
     <p>学園祭をもっと楽しく。気になる情報をAIチャットで簡単にチェック！</p>
-    <button class="start" id="startButton" type="button">Start Now →</button>
+    <button class="start" id="startButton" type="button">チャットを始める →</button>
     <button class="welcome-voice-btn" id="welcomeVoiceButton" type="button" aria-label="音声をミュート" aria-pressed="false" title="音声をミュート">🔊</button>
     <p class="welcome-voice-hint" id="welcomeVoiceHint" aria-live="polite">音声ガイドはミュートするまで繰り返し再生します。</p>
     <div class="intro-features" aria-label="おすすめ機能">
@@ -48,39 +48,39 @@
   <!-- Main chatbot view: IDs/classes are retained for existing script.js/style.css. -->
   <main class="chat" id="chat" aria-label="学園祭 AI Chat Bot">
     <div class="chat-content">
-      <aside class="desktop-sidebar" aria-label="Festival navigation">
+      <aside class="desktop-sidebar" aria-label="学園祭のメニュー">
         <div class="side-brand">
           <span class="side-symbol" aria-hidden="true">✳</span>
-          <div><strong>TTC FESTIVAL</strong><small>2026 · INFORMATION</small></div>
+          <div><strong>TTC 学園祭</strong><small>2026 · ご案内</small></div>
         </div>
         <div class="side-divider"></div>
-        <div class="side-label">QUICK EXPLORE</div>
+        <div class="side-label">カテゴリーから探す</div>
         <button data-q="おすすめ" type="button">✨ <span>おすすめ</span><b aria-hidden="true">↗</b></button>
         <button data-q="食べ物" type="button">🍜 <span>フード &amp; ドリンク</span><b aria-hidden="true">↗</b></button>
         <button data-q="ゲーム" type="button">🎮 <span>ゲーム &amp; 体験</span><b aria-hidden="true">↗</b></button>
         <button data-q="ステージ" type="button">🎤 <span>ステージ</span><b aria-hidden="true">↗</b></button>
         <button data-q="場所" type="button">🗺️ <span>会場ガイド</span><b aria-hidden="true">↗</b></button>
         <button data-q="時間" type="button">🕒 <span>開催時間</span><b aria-hidden="true">↗</b></button>
-        <div class="side-bottom"><span class="live-dot" aria-hidden="true"></span><div><strong>AI Chat Bot is ready</strong><small>学園祭のご案内はこちら</small></div></div>
+        <div class="side-bottom"><span class="live-dot" aria-hidden="true"></span><div><strong>AIに質問できます</strong><small>学園祭のご案内はこちら</small></div></div>
       </aside>
 
       <header class="head">
-        <button aria-label="スタート画面に戻る" class="back-btn" id="backButton" type="button">← Back</button>
+        <button aria-label="スタート画面に戻る" class="back-btn" id="backButton" type="button">← 戻る</button>
         <img alt="TTC 学園祭 2026" src="assets/festival-logo.webp">
         <div>
-          <h1>学園祭 AI Chat Bot</h1>
-          <p>TTC 学園祭 2026 • Your AI Festival Guide</p>
-          <span class="online" aria-label="オンライン">● ONLINE</span>
+          <h1>学園祭 AI チャットボット</h1>
+          <p>TTC 学園祭 2026 • 学園祭ガイド</p>
+          <span class="online" aria-label="チャットで質問できます">● チャットで質問</span>
         </div>
       </header>
 
       <nav class="topics" aria-label="質問カテゴリー">
         <button aria-controls="infoList" aria-expanded="false" id="infoToggle" type="button">📋 情報一覧</button>
         <button data-q="おすすめは何ですか？" type="button">✨ おすすめ</button>
-        <button data-q="食べ物はどこですか？" type="button">🍜 Food</button>
-        <button data-q="ゲームはありますか？" type="button">🎮 Games</button>
-        <button data-q="ステージについて教えて" type="button">🎤 Stage</button>
-        <button data-q="会場の場所を教えて" type="button">🗺️ Guide</button>
+        <button data-q="食べ物はどこですか？" type="button">🍜 フード</button>
+        <button data-q="ゲームはありますか？" type="button">🎮 ゲーム</button>
+        <button data-q="ステージについて教えて" type="button">🎤 ステージ</button>
+        <button data-q="会場の場所を教えて" type="button">🗺️ 会場案内</button>
       </nav>
 
       <div class="info-list" hidden id="infoList">
@@ -95,7 +95,7 @@
           <button data-q="開催時間を教えて" type="button">🕒 開催時間</button>
           <button data-q="トイレはどこですか？" type="button">🚻 トイレ・休憩</button>
         </div>
-        <small>※ 詳細な日時・場所は学校の公式案内をご確認ください。</small>
+        <small>※ 2026年の日時・出店・会場情報は学校の確認が必要です。<a href="https://tec.ttc.ac.jp/news/" target="_blank" rel="noopener noreferrer">公式のお知らせ</a>もご確認ください。</small>
       </div>
 
       <div class="messages" id="messages" role="log" aria-label="チャット履歴" aria-live="polite" aria-relevant="additions">
@@ -106,22 +106,22 @@
 私は、皆さんの学園祭をサポートするAIチャットボットです！🤖✨
 🎪 学園祭のイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを聞いてください！
 🏫 学校や学科についての質問にもお答えします。
-🎙️ 文字でも音声でも質問でき、日本語のローマ字入力や、さまざまな言語にも対応しています。🌏
+🎙️ 日本語の音声入力に対応しています。文字ではローマ字やさまざまな言語でも質問できます。🌏
 ※ イベントの最新日時や会場などは、学校の公式案内もご確認ください。
 さあ、一緒に学園祭を楽しみましょう！🎊</div>
         </div>
       </div>
       <form class="composer" id="form">
-        <input aria-label="メッセージ" autocomplete="off" id="input" placeholder="メッセージを入力..." maxlength="1200" required>
-        <button id="micButton" class="voice-control" type="button" aria-label="音声で質問" title="音声で質問" aria-pressed="false">🎙️</button>
+        <input aria-label="質問を入力" autocomplete="off" id="input" placeholder="学園祭について質問してみましょう..." maxlength="1200" required>
+        <button id="micButton" class="voice-control" type="button" aria-label="日本語で音声質問" title="日本語で音声質問" aria-pressed="false">🎙️</button>
         <button id="soundButton" class="voice-control" type="button" aria-label="音声回答をオフにする" title="音声回答オン" aria-pressed="true">🔊</button>
         <button type="submit" aria-label="送信">➤</button>
       </form>
       <div class="voice-status" id="voiceStatus" role="status" aria-live="polite" hidden></div>
-      <div class="foot">TTC 学園祭 2026 • Gemini AI Chat Bot</div>
+      <div class="foot">TTC 学園祭 2026 • AI案内チャット</div>
     </div>
   </main>
-  <script src="config.js?v=20261019-voice2"></script>
-  <script src="script.js?v=gakuensai-fixed-20261021-3"></script>
+  <script src="config.js?v=20261022-jp-ux1"></script>
+  <script src="script.js?v=20261022-jp-ux-voice3"></script>
 </body>
 </html>
