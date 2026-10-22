@@ -2,11 +2,12 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import worker from '../cloudflare-worker/src/index.js';
 const root = new URL('../', import.meta.url);
 function load(name) { return fs.readFileSync(new URL(name, root), 'utf8'); }
 for (const name of ['script.js','cloudflare-worker/src/index.js','cloudflare-worker/src/school-data.js','cloudflare-worker/src/festival-data.js']) {
-  execFileSync(process.execPath, ['--check', new URL(name,root).pathname]);
+  execFileSync(process.execPath, ['--check', fileURLToPath(new URL(name, root))]);
 }
 const html=load('index.html'), js=load('script.js');
 for (const label of ['チャットを始める', '← 戻る', 'フード', 'ゲーム', 'ステージ', '会場案内']) assert(html.includes(label), `missing ${label}`);
