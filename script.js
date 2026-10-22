@@ -1073,14 +1073,12 @@ if (!("speechSynthesis" in window)) {
 }
 
 
-// ---------- MOBILE-SAFE WELCOME VOICE (iOS SAFARI / ANDROID CHROME) ----------
-// Autoplay is best-effort. Mobile browsers can require a real user gesture.
-// One small icon toggles mute; a first tap anywhere on the welcome screen
-// also unlocks speech when browser autoplay policy requires it.
+// ---------- WELCOME VOICE: AUTO WHEN ALLOWED, ONE-TAP OTHERWISE ----------
+// IMPORTANT: browsers may prohibit audible autoplay without user interaction.
+// Never claim to bypass that policy. Instead offer a reliable first-tap action.
 const welcomeVoiceButton = document.getElementById("welcomeVoiceButton");
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
-// Gakuensai AI: pronounce the name consistently as がくえんさいエーアイ.
-console.info("[TTC Voice Version] 20261022-japanese-ux-voice3");
+console.info("[TTC Voice Version] welcome-autoplay-gesture-v4");
 const WELCOME_SPEECH = "こんにちは！東京テクニカルカレッジのがくえんさいへようこそ！" +
   "私は、がくえんさい、エーアイです。皆さんをサポートするチャットボットです！" +
   "がくえんさいのイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +
@@ -1096,20 +1094,30 @@ let welcomeStartTimer = null;
 let welcomeUnlocked = false;
 let welcomePendingGesture = false;
 let welcomeStarted = false;
+let welcomeLastGestureAt = 0;
 
 function isWelcomeVisible() {
   return !document.hidden && !document.getElementById("intro").hidden &&
     !document.getElementById("chat").classList.contains("active");
 }
-function updateWelcomeButton() {
-  if (!welcomeVoiceButton) return;
-  welcomeVoiceButton.textContent = welcomeMuted ? "🔇" : "🔊";
-  welcomeVoiceButton.setAttribute("aria-pressed", String(welcomeMuted));
-  welcomeVoiceButton.setAttribute("aria-label", welcomeMuted ? "音声をオンにする" : "音声をミュート");
-  welcomeVoiceButton.title = welcomeMuted ? "音声をオンにする" : "音声をミュート";
-}
 function welcomeStatus(message) {
   if (welcomeVoiceHint) welcomeVoiceHint.textContent = message;
+}
+function updateWelcomeButton() {
+  if (!welcomeVoiceButton) return;
+  const waiting = !welcomeMuted && welcomePendingGesture && !welcomeStarted;
+  welcomeVoiceButton.textContent = welcomeMuted ? "🔇" : waiting ? "▶" : "🔊";
+  const description = welcomeMuted ? "音声をオンにする" : waiting ? "音声ガイドを再生する" : "音声をミュート";
+  welcomeVoiceButton.setAttribute("aria-pressed", String(welcomeMuted));
+  welcomeVoiceButton.setAttribute("aria-label", description);
+  welcomeVoiceButton.title = description;
+  document.getElementById("intro")?.classList.toggle("voice-needs-gesture", waiting);
+}
+function requestWelcomeGesture(message = "🔊 音声ガイドを聞くには画面をタップしてください。") {
+  if (!isWelcomeVisible() || welcomeMuted) return;
+  welcomePendingGesture = true;
+  welcomeStatus(message);
+  updateWelcomeButton();
 }
 function stopWelcomeSpeech() {
   clearTimeout(welcomeRepeatTimer);
@@ -1121,19 +1129,24 @@ function stopWelcomeSpeech() {
   if (canSpeakWelcome) window.speechSynthesis.cancel();
 }
 function repeatWelcome() {
-  if (welcomeMuted || !isWelcomeVisible()) return;
-  clearTimeout(welcomeRepeatTimer);
-  welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 250);
+  if (!welcomeMuted && isWelcomeVisible()) {
+    clearTimeout(welcomeRepeatTimer);
+    welcomeRepeatTimer = setTimeout(() => playWelcomeSpeech(), 250);
+  }
 }
-function playWelcomeSpeech() {
+function playWelcomeSpeech(fromGesture = false) {
   if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible()) return;
   stopWelcomeSpeech();
+  welcomePendingGesture = false;
+  updateWelcomeButton();
+
   const synth = window.speechSynthesis;
   const utterance = new SpeechSynthesisUtterance(WELCOME_SPEECH);
   welcomeUtterance = utterance;
   utterance.lang = "ja-JP";
   utterance.rate = JAPANESE_VOICE_RATE;
   utterance.pitch = JAPANESE_VOICE_PITCH;
+  utterance.volume = 1;
   const jaVoice = getPinnedJapaneseVoice();
   if (jaVoice) utterance.voice = jaVoice;
   utterance.onstart = () => {
@@ -1141,7 +1154,8 @@ function playWelcomeSpeech() {
     welcomeStarted = true;
     welcomePendingGesture = false;
     clearTimeout(welcomeStartTimer);
-    welcomeStatus("音声ガイドを再生しています。");
+    welcomeStatus("音声ガイドを再生しています。🔊");
+    updateWelcomeButton();
   };
   utterance.onend = () => {
     if (welcomeUtterance !== utterance) return;
@@ -1149,40 +1163,39 @@ function playWelcomeSpeech() {
     welcomeStarted = false;
     repeatWelcome();
   };
-  utterance.onerror = (e) => {
+  utterance.onerror = (event) => {
     if (welcomeUtterance !== utterance) return;
     clearTimeout(welcomeStartTimer);
     welcomeUtterance = null;
     welcomeStarted = false;
-    if (e.error === "interrupted" || e.error === "canceled") return;
-    welcomePendingGesture = true;
-    welcomeStatus("音声を聞くには画面を一度タップしてください。");
-    // Do not loop on errors: wait for a gesture rather than spamming retries.
+    if (event.error === "interrupted" || event.error === "canceled") return;
+    // "not-allowed" is a legitimate autoplay restriction, not a worker failure.
+    console.info("[TTC Welcome Voice] Speech unavailable:", event.error);
+    requestWelcomeGesture();
   };
   try {
+    if (synth.paused) synth.resume();
+    // Calling speak directly in a trusted user handler is important on Safari.
     synth.speak(utterance);
-    // Safari/Chrome may silently ignore speak() before user activation.
-    // Don't continuously cancel/retry; wait for first real user gesture.
+    // Some browsers silently refuse to start rather than firing onerror.
     welcomeStartTimer = setTimeout(() => {
-      if (welcomeUtterance === utterance && !welcomeStarted) {
-        welcomePendingGesture = true;
-        welcomeStatus("音声を聞くには画面を一度タップしてください。");
-      }
-    }, 1800);
-  } catch (e) {
+      if (welcomeUtterance === utterance && !welcomeStarted) requestWelcomeGesture();
+    }, fromGesture ? 2300 : 1400);
+  } catch (error) {
+    if (welcomeUtterance !== utterance) return;
     welcomeUtterance = null;
-    welcomePendingGesture = true;
-    welcomeStatus("音声を聞くには画面を一度タップしてください。");
+    requestWelcomeGesture();
   }
 }
 function activateWelcomeFromGesture(event) {
-  if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible()) return;
-  if (event?.target?.closest?.("#startButton")) return;
+  if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible() || welcomeStarted) return;
+  if (event?.target?.closest?.("#welcomeVoiceButton, #startButton")) return;
+  // pointerdown + touchend + click may all fire for the same tap.
+  const now = performance.now();
+  if (now - welcomeLastGestureAt < 700) return;
+  welcomeLastGestureAt = now;
   welcomeUnlocked = true;
-  if (welcomePendingGesture || !welcomeStarted && !window.speechSynthesis.speaking) {
-    welcomePendingGesture = false;
-    playWelcomeSpeech(); // synchronous during the user gesture
-  }
+  playWelcomeSpeech(true); // synchronous in a real interaction
 }
 if (welcomeVoiceButton) {
   updateWelcomeButton();
@@ -1191,53 +1204,41 @@ if (welcomeVoiceButton) {
     welcomeStatus("このブラウザーは音声読み上げに対応していません。");
   } else {
     welcomeVoiceButton.addEventListener("click", () => {
-      // First tap when autoplay was blocked should ENABLE sound, not mute it.
-      if (!welcomeMuted && welcomePendingGesture && !welcomeStarted) {
-        welcomeUnlocked = true;
-        welcomePendingGesture = false;
-        playWelcomeSpeech();
-        return;
-      }
-      welcomeMuted = !welcomeMuted;
       if (welcomeMuted) {
+        welcomeMuted = false;
+        welcomeUnlocked = true;
+        playWelcomeSpeech(true);
+      } else if (!welcomeStarted) {
+        // First tap means PLAY, even if autoplay failure hasn't fired yet.
+        // Do not accidentally mute before any welcome sound has played.
+        welcomeUnlocked = true;
+        playWelcomeSpeech(true);
+      } else {
+        welcomeMuted = true;
         stopWelcomeSpeech();
         welcomeStatus("音声はミュートされています。");
-      } else {
-        welcomeUnlocked = true;
-        playWelcomeSpeech();
       }
       updateWelcomeButton();
     });
     const intro = document.getElementById("intro");
-    intro.addEventListener("pointerdown", event => {
-      if (event.target.closest?.("#welcomeVoiceButton")) return;
-      activateWelcomeFromGesture(event);
-    });
-    intro.addEventListener("touchend", event => {
-      if (event.target.closest?.("#welcomeVoiceButton")) return;
-      activateWelcomeFromGesture(event);
-    }, {passive:true});
+    intro.addEventListener("pointerdown", activateWelcomeFromGesture);
+    intro.addEventListener("touchend", activateWelcomeFromGesture, {passive: true});
+    intro.addEventListener("click", activateWelcomeFromGesture);
     intro.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") activateWelcomeFromGesture(event);
     });
     window.addEventListener("load", () => {
-      if (isWelcomeVisible()) playWelcomeSpeech();
-    }, {once:true});
+      if (isWelcomeVisible()) playWelcomeSpeech(); // best-effort browser autoplay
+    }, {once: true});
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) stopWelcomeSpeech();
       else if (!welcomeMuted && isWelcomeVisible()) {
         if (welcomeUnlocked) playWelcomeSpeech();
-        else {
-          welcomePendingGesture = true;
-          welcomeStatus("音声を聞くには画面を一度タップしてください。");
-        }
+        else requestWelcomeGesture();
       }
     });
     window.addEventListener("pageshow", event => {
-      if (event.persisted && !welcomeMuted && isWelcomeVisible()) {
-        welcomePendingGesture = true;
-        welcomeStatus("音声を聞くには画面を一度タップしてください。");
-      }
+      if (event.persisted && !welcomeMuted && isWelcomeVisible()) requestWelcomeGesture();
     });
   }
 }

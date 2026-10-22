@@ -535,3 +535,16 @@ select {
 
 /* Mobile mic improvements: tap target and keyboard dictation fallback */
 @media(max-width:700px){.composer #micButton{min-width:44px!important;min-height:44px!important;touch-action:manipulation}.voice-status{padding:6px 14px 9px;line-height:1.5;overflow-wrap:anywhere}}
+
+/* Show the tap-to-start hint only when the browser has blocked autoplay. */
+.intro.voice-needs-gesture .welcome-voice-hint {
+  position:fixed !important; bottom:max(18px, env(safe-area-inset-bottom)) !important;
+  left:50% !important; top:auto !important; transform:translateX(-50%) !important;
+  z-index:1001 !important; display:block !important;
+  width:min(90vw,430px) !important; height:auto !important;
+  margin:0 !important; padding:10px 16px !important;
+  clip:auto !important; overflow:visible !important; white-space:normal !important;
+  color:white !important; background:rgba(10,36,61,.92) !important;
+  border-radius:12px !important; text-align:center !important; font-size:13px !important;
+  pointer-events:none !important; box-shadow:0 4px 18px rgba(0,0,0,.2);
+}
