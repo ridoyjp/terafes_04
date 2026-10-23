@@ -105,8 +105,87 @@ function json(data, status, headers) {
   });
 }
 
+// Quota-saving controls. Queue is per Worker isolate (not a global distributed queue).
+const MAX_IN_FLIGHT = 3;
+const MAX_WAITING = 20;
+let inFlight = 0;
+const waiting = [];
+const sharedRequests = new Map();
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function withLocalQueue(work) {
+  if (inFlight >= MAX_IN_FLIGHT) {
+    if (waiting.length >= MAX_WAITING) {
+      const error = new Error("BUSY"); error.status = 503; throw error;
+    }
+    await new Promise(resolve => waiting.push(resolve));
+  } else { inFlight++; }
+  try { return await work(); }
+  finally {
+    const next = waiting.shift();
+    if (next) next(); else inFlight--;
+  }
+}
+
+async function requestGemini(endpoint, apiKey, payload, timeoutMs = 22000) {
+  // Retry ONLY brief provider overloads; do not repeatedly consume a daily quota.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(payload), signal: controller.signal
+      });
+      const result = await response.json().catch(() => ({}));
+      const message = String(result?.error?.message || "");
+      if (attempt === 0 && (response.status === 503 || (response.status === 429 && !/per day|daily|quota exceeded for quota metric.*day/i.test(message)))) {
+        await pause(350 + Math.floor(Math.random() * 250));
+        continue;
+      }
+      return { response, result };
+    } finally { clearTimeout(timer); }
+  }
+}
+
+async function hashString(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function cacheRead(request, type, keyData) {
+  try {
+    const key = await hashString(JSON.stringify(keyData));
+    const cacheKey = new Request(new URL(`/__quota_cache/${type}/${key}`, request.url).toString());
+    const entry = await caches.default.match(cacheKey);
+    return { cacheKey, data: entry ? await entry.json() : null };
+  } catch { return { cacheKey: null, data: null }; }
+}
+
+async function cacheWrite(cacheKey, data, seconds, context) {
+  if (!cacheKey) return;
+  const response = new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${seconds}` } });
+  try {
+    if (context?.waitUntil) context.waitUntil(caches.default.put(cacheKey, response));
+    else await caches.default.put(cacheKey, response);
+  } catch { /* Cache is best-effort. */ }
+}
+
+function safeFaq(message, language) {
+  // Only stable official facts; festival dates/prices are handled separately.
+  const q = String(message).toLowerCase().trim();
+  if (/^(?:ttc|東京テクニカルカレッジ|tokyo technical college)(?:とは|って何|とは何ですか|とは\?|ってどんな学校| とは)?[？?。 ]*$/i.test(q)) {
+    if (language === 'bn-BD') return 'TTC (東京テクニカルカレッジ) জাপানের টোকিওতে অবস্থিত একটি বিশেষায়িত কারিগরি কলেজ। কোর্স ও ভর্তি সম্পর্কে সর্বশেষ তথ্য স্কুলের অফিসিয়াল ওয়েবসাইটে দেখুন: https://tec.ttc.ac.jp/';
+    if (language === 'en-US') return 'Tokyo Technical College (TTC) is a vocational college in Tokyo, Japan. Check its official website for the latest courses and admissions: https://tec.ttc.ac.jp/';
+    return '東京テクニカルカレッジ（TTC）は東京都にある専門学校です。学科・入学に関する最新情報は公式サイトをご確認ください：https://tec.ttc.ac.jp/';
+  }
+  return null;
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin") || "";
 
     const allowedOrigins = [
@@ -160,37 +239,27 @@ export default {
       }
       const model = String(env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash").trim();
       const japaneseOnly = voiceData?.language === "ja-JP";
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 28000);
       try {
-        const response = await fetch(
+        const { response, result } = await withLocalQueue(() => requestGemini(
           "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [
-                { text: japaneseOnly
-                    ? "Transcribe this Japanese speech in standard Japanese writing (kanji, hiragana and katakana). Never translate or answer. Return ONLY the spoken Japanese words. If silent or unintelligible return an empty response."
-                    : "Transcribe the spoken audio exactly in the ORIGINAL spoken language and ORIGINAL writing system. Automatically identify language. Do not translate or answer the speech. Return only the transcript, without explanations or labels. If silent/unintelligible, return an empty response." },
-                { inlineData: { mimeType: cleanedType, data: audio } }
-              ] }],
-              generationConfig: { temperature: 0, maxOutputTokens: 1400 }
-            }),
-            signal: controller.signal
-          }
-        );
-        const result = await response.json().catch(() => ({}));
+          env.GEMINI_API_KEY,
+          { contents: [{ role: "user", parts: [
+            { text: japaneseOnly
+              ? "Transcribe this Japanese speech in standard Japanese writing (kanji, hiragana and katakana). Never translate or answer. Return ONLY the spoken Japanese words. If silent or unintelligible return an empty response."
+              : "Transcribe the spoken audio exactly in the ORIGINAL spoken language and ORIGINAL writing system. Automatically identify language. Do not translate or answer the speech. Return only the transcript, without explanations or labels. If silent/unintelligible, return an empty response." },
+            { inlineData: { mimeType: cleanedType, data: audio } }
+          ] }], generationConfig: { temperature: 0, maxOutputTokens: 1400 } }, 24000
+        ));
         if (!response.ok) {
-          console.error("Gemini transcription error", { model, status: response.status, providerStatus: result?.error?.status, providerMessage: String(result?.error?.message || "").slice(0, 250) });
+          console.error("Gemini transcription error", { model, status: response.status, providerStatus: result?.error?.status });
           return json({ error: response.status === 429 ? "Voice AI usage limit reached" : "Voice transcription service unavailable" }, response.status === 429 ? 429 : 502, headers);
         }
         const transcript = (result.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
         return json({ transcript: transcript.slice(0, 1500) }, 200, headers);
       } catch (error) {
         console.error("Voice transcription request failed", error?.name);
-        return json({ error: "Voice recognition timed out" }, 504, headers);
-      } finally { clearTimeout(timer); }
+        return json({ error: error?.status === 503 ? "Voice service is busy; retry shortly" : "Voice recognition timed out" }, error?.status === 503 ? 503 : 504, headers);
+      }
     }
 
     if (url.pathname !== "/chat") {
@@ -274,6 +343,21 @@ export default {
           : "2026年の学園祭の開催日時、出店、価格、教室などの詳細は、現在学校から確認が取れていません。学校の公式案内または担当の先生にご確認ください。";
       return json({ reply, informationStatus: "UNVERIFIED_2026" }, 200, headers);
     }
+    const inferredLanguage = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? 'bn-BD' : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? 'ja-JP' : 'en-US');
+    // Deterministic FAQ only for independent questions; preserve multi-turn context.
+    if (!history.length) {
+      const faq = safeFaq(message, inferredLanguage);
+      if (faq) return json({ reply: faq }, 200, headers);
+    }
+    // Cache exact single-turn, short, non-personal prompts only. Never cache
+    // conversation histories or text containing likely personal information.
+    const cacheable = history.length === 0 && message.length <= 180 &&
+      !/(?:@|https?:|\b\d{7,}\b|password|パスワード|電話番号|メールアドレス|住所は|my name|私の名前|আমার নাম)/i.test(message);
+    const cacheKeyData = { v: 1, model, message: message.normalize('NFKC').toLowerCase(), language: effectiveResponseLanguage,
+      festivalVersion: FESTIVAL_DATA.last_verified || FESTIVAL_DATA.status,
+      schoolVersion: '2026-10-19' };
+    const cached = cacheable ? await cacheRead(request, 'chat', cacheKeyData) : { cacheKey: null, data: null };
+    if (cached.data?.reply) return json(cached.data, 200, headers);
     const targetLanguage = LANGUAGE_NAMES[effectiveResponseLanguage] || "the language of the latest user message";
     const languageRule = `
 CRITICAL OUTPUT LANGUAGE POLICY:
@@ -319,66 +403,32 @@ Your final answer should directly address the latest question; no unrelated fest
       parts: [{ text: message }]
     });
 
-    const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 25000);
-
     try {
-      const endpoint =
-        "https://generativelanguage.googleapis.com/v1beta/models/" +
-        encodeURIComponent(model) +
-        ":generateContent";
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": env.GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getApprovedFestivalContext(message) + "\n\n" + getRelevantSchoolData(message, history) }]
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 1200
-          }
-        }),
-        signal: controller.signal
-      });
-
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        console.error("Gemini API Error:", {
-          model,
-          httpStatus: response.status,
-          providerStatus: result?.error?.status,
-          providerMessage: String(
-            result?.error?.message || ""
-          ).slice(0, 500)
-        });
-
-        if (response.status === 429) {
-          return json({
-            error: "AIの利用上限に達しました。"
-          }, 429, headers);
+      const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
+        encodeURIComponent(model) + ":generateContent";
+      const payload = {
+        systemInstruction: {
+          parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getApprovedFestivalContext(message) + "\n\n" + getRelevantSchoolData(message, history) }]
+        }, contents, generationConfig: { temperature: 0.5, maxOutputTokens: 1200 }
+      };
+      const work = () => withLocalQueue(() => requestGemini(endpoint, env.GEMINI_API_KEY, payload));
+      // Deduplicate simultaneous identical requests within the same isolate.
+      const dedupeKey = cacheable ? await hashString(JSON.stringify(cacheKeyData)) : null;
+      let promise = dedupeKey && sharedRequests.get(dedupeKey);
+      if (!promise) {
+        promise = work();
+        if (dedupeKey) {
+          sharedRequests.set(dedupeKey, promise);
+          promise.finally(() => { if (sharedRequests.get(dedupeKey) === promise) sharedRequests.delete(dedupeKey); }).catch(() => {});
         }
-
-        if (response.status === 404) {
-          return json({
-            error: "Geminiモデルが見つかりません。Workerログをご確認ください。"
-          }, 502, headers);
-        }
-
-        return json({
-          error: "AIサービスに接続できませんでした。"
-        }, 502, headers);
       }
-
+      const { response, result } = await promise;
+      if (!response.ok) {
+        console.error("Gemini API Error:", { model, httpStatus: response.status, providerStatus: result?.error?.status });
+        if (response.status === 429) return json({ error: "AIの利用上限に達しました。" }, 429, headers);
+        if (response.status === 404) return json({ error: "Geminiモデルが見つかりません。Workerログをご確認ください。" }, 502, headers);
+        return json({ error: "AIサービスに接続できませんでした。" }, 502, headers);
+      }
       const reply = (
         result.candidates?.[0]?.content?.parts || []
       )
@@ -394,19 +444,16 @@ Your final answer should directly address the latest question; no unrelated fest
         }, 502, headers);
       }
 
-      return json({
-        reply: reply.slice(0, 5000)
-      }, 200, headers);
+      const resultData = { reply: reply.slice(0, 5000) };
+      if (cacheable) await cacheWrite(cached.cacheKey, resultData, 1800, ctx);
+      return json(resultData, 200, headers);
 
     } catch (error) {
       console.error("Gemini request failed:", error?.name);
 
       return json({
-        error: "AIへの接続がタイムアウトしました。"
-      }, 504, headers);
-
-    } finally {
-      clearTimeout(timeout);
+        error: error?.status === 503 ? "AIが混み合っています。少し後でお試しください。" : "AIへの接続がタイムアウトしました。"
+      }, error?.status === 503 ? 503 : 504, headers);
     }
   }
 };
