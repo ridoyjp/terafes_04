@@ -214,14 +214,14 @@ export class FestivalQuota {
     const now = new Date();
     const day = now.toISOString().slice(0, 10);
     const minute = now.toISOString().slice(0, 16);
-    const get = key => this.sql.exec('SELECT count FROM counters WHERE bucket=?', key).one()?.count || 0;
+    const get = key => this.sql.exec('SELECT count FROM counters WHERE bucket=?', key).toArray()[0]?.count ?? 0;
     if (action === 'stats') {
       return Response.json({ day, admittedToday:get('a:'+day), blockedToday:get('b:'+day), chatToday:get('chat:'+day), voiceToday:get('voice:'+day), provider429Today:get('p429:'+day), providerErrorsToday:get('perr:'+day), currentMinute:get('m:'+minute), faqCacheHitsToday:get('hit:'+day), faqCacheStoresToday:get('store:'+day),
         note:'Worker-side counters, not Google AI Studio usage. Daily counters reset at UTC midnight.' });
     }
     if (action === 'cache_get') {
       if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey)) return Response.json({ hit:false });
-      const row=this.sql.exec('SELECT reply,expires FROM faq_cache WHERE key=?',cacheKey).one();
+      const row=this.sql.exec('SELECT reply,expires FROM faq_cache WHERE key=?',cacheKey).toArray()[0];
       if (!row || row.expires <= Date.now()) return Response.json({hit:false});
       this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1','hit:'+day);
       return Response.json({hit:true,reply:row.reply});
