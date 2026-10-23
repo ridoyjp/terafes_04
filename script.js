@@ -544,7 +544,7 @@ let recordingBusy = false;
 let recordingStartedAt = 0;
 const IS_MOBILE_VOICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 900);
 const MAX_RECORD_MS = IS_MOBILE_VOICE ? 8500 : 11000;
-const SILENCE_MS = IS_MOBILE_VOICE ? 900 : 900; // Avoid cutting natural word pauses.
+const SILENCE_MS = IS_MOBILE_VOICE ? 650 : 700; // Avoid cutting natural word pauses.
 const MAX_AUDIO_BYTES = 2_100_000;
 const TRANSCRIBE_API_URL = CHAT_API_URL.replace(/\/chat(?:\?.*)?$/, "/transcribe");
 
