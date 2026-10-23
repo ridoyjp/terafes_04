@@ -1,15 +1,16 @@
-TTC AI Chatbot Fast One-Tap Auto Send
+VOICE AUTO SEND — School Festival
 
-Updated script.js uses 800ms silence threshold instead of 2000ms.
-Preserves Gemini /transcribe multilingual auto-detect and automatic ask() send.
-Warning: natural pauses or background noise can cause early or delayed detection.
-Transcription and AI response still take network time.
+Mic button ekbar chapun, kotha bolun. Kotha seshe prai 0.65-0.7 sec nirob thakle recording stop hobe, transcription er por question automatic send hobe. Send button chapte hobe na.
 
-Install: copy only script.js into C:\terafes_04\script.js; do not overwrite your locally customized other files.
-Commands:
- cd /d C:\terafes_04
- node --check script.js
- git add script.js
- git diff --cached
- git commit -m "Speed up one-tap multilingual voice auto send"
- git push origin main
+Updated only script.js. Original UI/design and Cloudflare backend remain unchanged.
+
+Install:
+cd /d C:\terafes_04_fresh
+copy /Y script.js script.backup.js
+(Extract updated ZIP files and replace script.js, or copy script.js manually)
+node --check script.js
+git add script.js
+git commit -m "Faster voice auto send"
+git push origin main
+
+Note: Gemini transcription/network time still applies; brief pauses can cause early send.
