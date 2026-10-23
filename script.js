@@ -770,6 +770,7 @@ async function startRecording() {
       recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
     }
     recordingChunks = [];
+    recordingStream.getAudioTracks().forEach(track => { track.onended = () => { if (recorder?.state === "recording") stopRecording(); }; });
     recorder.ondataavailable = event => { if (event.data?.size) recordingChunks.push(event.data); };
     recorder.onerror = () => { voiceMessage("⚠️ 録音に失敗しました。マイクを確認してください。"); stopMicrophoneTracks(); recordingBusy = false; };
     autoSendRecording = true;
@@ -787,7 +788,7 @@ async function startRecording() {
         } else void processRecording(audioBlob);
       }
     };
-    recorder.start();
+    try { recorder.start(250); } catch (_) { recorder.start(); }
     recordingStartedAt = performance.now();
     setListening(true);
     voiceMessage(`🎙️ 話してください。約${SILENCE_MS / 1000}秒の無音で録音終了（最大${MAX_RECORD_MS / 1000}秒）。`);

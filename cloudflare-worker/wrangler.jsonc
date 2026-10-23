@@ -2,5 +2,27 @@
   "name": "gakuen-chatbot-ai",
   "main": "src/index.js",
   "compatibility_date": "2026-10-16",
-  "workers_dev": true
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "FESTIVAL_QUOTA",
+        "class_name": "FestivalQuota"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "festival-quota-v1",
+      "new_sqlite_classes": [
+        "FestivalQuota"
+      ]
+    }
+  ],
+  "vars": {
+    "GLOBAL_REQUESTS_PER_MINUTE": "25",
+    "GLOBAL_REQUESTS_PER_DAY": "400",
+    "USER_REQUESTS_PER_MINUTE": "6",
+    "USER_REQUESTS_PER_DAY": "50"
+  }
 }

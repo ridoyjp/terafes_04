@@ -139,9 +139,11 @@ async function requestGemini(endpoint, apiKey, payload, timeoutMs = 22000) {
         body: JSON.stringify(payload), signal: controller.signal
       });
       const result = await response.json().catch(() => ({}));
-      const message = String(result?.error?.message || "");
-      if (attempt === 0 && (response.status === 503 || (response.status === 429 && !/per day|daily|quota exceeded for quota metric.*day/i.test(message)))) {
-        await pause(350 + Math.floor(Math.random() * 250));
+      // A 429 is a rate/quota signal. Retrying it immediately can spend more
+      // requests and worsen festival traffic, so return it to the caller.
+      // Retry only a transient 503, once, with small jitter.
+      if (attempt === 0 && response.status === 503) {
+        await pause(500 + Math.floor(Math.random() * 500));
         continue;
       }
       return { response, result };
@@ -184,6 +186,76 @@ function safeFaq(message, language) {
   return null;
 }
 
+
+// Shared quota protection: all Cloudflare Worker isolates consult one SQLite Durable Object.
+// Counters only; never store raw IP, chat text, audio or Gemini keys.
+export class FestivalQuota {
+  constructor(ctx) {
+    this.sql = ctx.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS counters (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL)');
+  }
+  async fetch(request) {
+    const { action, client, kind, limits } = await request.json();
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    const minute = now.toISOString().slice(0, 16);
+    const get = key => this.sql.exec('SELECT count FROM counters WHERE bucket=?', key).one()?.count || 0;
+    if (action === 'stats') {
+      return Response.json({ day, admittedToday:get('a:'+day), blockedToday:get('b:'+day), chatToday:get('chat:'+day), voiceToday:get('voice:'+day), provider429Today:get('p429:'+day), providerErrorsToday:get('perr:'+day), currentMinute:get('m:'+minute) });
+    }
+    if (action === 'event') {
+      const key = (kind === '429' ? 'p429:' : 'perr:') + day;
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', key);
+      return Response.json({ ok:true });
+    }
+    const keys = [['m:'+minute,limits.globalMinute],['a:'+day,limits.globalDay],['u:'+day+':'+client,limits.userDay],['um:'+minute+':'+client,limits.userMinute]];
+    const denied = keys.some(([key,limit]) => get(key)>=limit);
+    if (denied) {
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', 'b:'+day);
+      return Response.json({ allowed:false });
+    }
+    for(const [key] of keys) this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1',key);
+    this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1',kind+':'+day);
+    // Only short-window per visitor counters need cleanup; older daily counters also expire.
+    if (Math.random()<0.01) this.sql.exec("DELETE FROM counters WHERE bucket LIKE 'um:%' AND bucket < ?", 'um:'+new Date(Date.now()-180000).toISOString().slice(0,16));
+    return Response.json({ allowed:true });
+  }
+}
+
+function quotaStub(env) {
+  if (!env.FESTIVAL_QUOTA) throw Object.assign(new Error('QUOTA_NOT_CONFIGURED'),{status:503});
+  return env.FESTIVAL_QUOTA.get(env.FESTIVAL_QUOTA.idFromName('festival-global-v1'));
+}
+const clampLimit=(value,fallback)=>Math.max(1,Math.min(100000,Number(value)||fallback));
+async function quotaAction(env, request, kind='chat', action='admit') {
+  const address = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const secret = env.RATE_LIMIT_SALT || env.GEMINI_API_KEY || 'not-configured';
+  const client = (await hashString(secret+':'+address)).slice(0,20);
+  const limits = {
+    globalMinute:clampLimit(env.GLOBAL_REQUESTS_PER_MINUTE,25),
+    globalDay:clampLimit(env.GLOBAL_REQUESTS_PER_DAY,400),
+    userMinute:clampLimit(env.USER_REQUESTS_PER_MINUTE,6),
+    userDay:clampLimit(env.USER_REQUESTS_PER_DAY,50)
+  };
+  const result=await quotaStub(env).fetch('https://quota.internal/',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,kind,client,limits})});
+  if(!result.ok) throw Object.assign(new Error('QUOTA_UNAVAILABLE'),{status:503});
+  return result.json();
+}
+async function admitted(env,request,kind,headers) {
+  try {
+    const answer=await quotaAction(env,request,kind);
+    if (!answer.allowed) return json({error:'Festival AI is busy or free quota safety limit reached. Please try later. School FAQ remains available.'},429,headers);
+    return null;
+  } catch (error) {
+    console.error('Shared quota unavailable:',error?.name);
+    return json({error:'AI is temporarily unavailable. Please try again later.'},503,headers);
+  }
+}
+function trackProviderError(env,request,status,ctx) {
+  const job=quotaAction(env,request,status===429?'429':'error','event').catch(()=>{});
+  ctx?.waitUntil?.(job);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin") || "";
@@ -215,6 +287,15 @@ export default {
       });
     }
 
+    // Private, read-only monitoring. Never expose counters to the public site.
+    if (url.pathname === "/admin/usage") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, headers);
+      const token = request.headers.get("Authorization") || "";
+      if (!env.ADMIN_STATS_TOKEN || token !== `Bearer ${env.ADMIN_STATS_TOKEN}`) return json({error:"Unauthorized"},401,headers);
+      try { return json(await quotaAction(env,request,'chat','stats'),200,headers); }
+      catch { return json({error:'Monitoring unavailable'},503,headers); }
+    }
+
     // Multilingual speech-to-text: audio is processed in memory, not stored.
     if (url.pathname === "/transcribe") {
       if (!allowed) return json({ error: "Origin not allowed" }, 403, headers);
@@ -237,6 +318,8 @@ export default {
       if (!allowedTypes.includes(cleanedType) || typeof audio !== "string" || audio.length < 100 || audio.length > 2_900_000 || !/^[a-zA-Z0-9+/=]+$/.test(audio)) {
         return json({ error: "Invalid audio data or audio type" }, 400, headers);
       }
+      const voiceLimit = await admitted(env, request, "voice", headers);
+      if (voiceLimit) return voiceLimit;
       const model = String(env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash").trim();
       const japaneseOnly = voiceData?.language === "ja-JP";
       try {
@@ -251,6 +334,7 @@ export default {
           ] }], generationConfig: { temperature: 0, maxOutputTokens: 1400 } }, 24000
         ));
         if (!response.ok) {
+          trackProviderError(env,request,response.status,ctx);
           console.error("Gemini transcription error", { model, status: response.status, providerStatus: result?.error?.status });
           return json({ error: response.status === 429 ? "Voice AI usage limit reached" : "Voice transcription service unavailable" }, response.status === 429 ? 429 : 502, headers);
         }
@@ -411,6 +495,8 @@ Your final answer should directly address the latest question; no unrelated fest
           parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getApprovedFestivalContext(message) + "\n\n" + getRelevantSchoolData(message, history) }]
         }, contents, generationConfig: { temperature: 0.5, maxOutputTokens: 1200 }
       };
+      const chatLimit = await admitted(env, request, "chat", headers);
+      if (chatLimit) return chatLimit;
       const work = () => withLocalQueue(() => requestGemini(endpoint, env.GEMINI_API_KEY, payload));
       // Deduplicate simultaneous identical requests within the same isolate.
       const dedupeKey = cacheable ? await hashString(JSON.stringify(cacheKeyData)) : null;
@@ -424,6 +510,7 @@ Your final answer should directly address the latest question; no unrelated fest
       }
       const { response, result } = await promise;
       if (!response.ok) {
+        trackProviderError(env,request,response.status,ctx);
         console.error("Gemini API Error:", { model, httpStatus: response.status, providerStatus: result?.error?.status });
         if (response.status === 429) return json({ error: "AIの利用上限に達しました。" }, 429, headers);
         if (response.status === 404) return json({ error: "Geminiモデルが見つかりません。Workerログをご確認ください。" }, 502, headers);
