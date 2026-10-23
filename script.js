@@ -271,7 +271,9 @@ function explainAIError(error) {
   if (error?.name === "AbortError") return "⚠️ AIの応答がタイムアウトしました。少し待ってからもう一度お試しください。";
   if (error?.status === 403) return "⚠️ サイトの接続元(Origin)が許可されていません。公式GitHub Pagesサイトをご利用ください。";
   if (error?.status === 429) return "⚠️ AIの利用上限に達しました。少し時間をおいてお試しください。";
-  if (error?.status === 502 || error?.status === 503 || error?.status === 504) return "⚠️ AIプロバイダーとの接続で問題が発生しました。管理者はCloudflare Workerログをご確認ください。";
+  if (error?.status === 503) return "⚠️ AIが一時的に利用できません。少し待って再試行してください。管理者はWorkerログをご確認ください。";
+  if (error?.status === 502) return "⚠️ Geminiから回答を取得できませんでした。管理者はCloudflare WorkerログのGemini API Errorをご確認ください。";
+  if (error?.status === 504) return "⚠️ AIの応答が時間切れになりました。通信環境を確認し、しばらくしてからお試しください。";
   if (error?.message === "AI_API_NOT_CONFIGURED") return "⚠️ AI APIのURLが設定されていません。config.jsを確認してください。";
   return "⚠️ 現在AIサービスに接続できません。通信環境を確認してもう一度お試しください。";
 }

@@ -419,12 +419,8 @@ export default {
       }, 400, headers);
     }
 
-    if (!env.GEMINI_API_KEY) {
-      return json({
-        error: "Gemini API Key is not configured"
-      }, 503, headers);
-    }
-
+    // Keep verified offline FAQs working even when the Gemini secret is absent.
+    // Check the key only immediately before the external Gemini request.
     const model = String(
       env.GEMINI_MODEL || DEFAULT_MODEL
     ).trim();
@@ -487,6 +483,9 @@ export default {
         }
       } catch (error) { console.warn('Shared cache unavailable:',error?.name); }
     }
+    if (!env.GEMINI_API_KEY) {
+      return json({ error: "Gemini API Key is not configured" }, 503, headers);
+    }
     const targetLanguage = LANGUAGE_NAMES[effectiveResponseLanguage] || "the language of the latest user message";
     const languageRule = `
 CRITICAL OUTPUT LANGUAGE POLICY:
@@ -540,20 +539,24 @@ Your final answer should directly address the latest question; no unrelated fest
           parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getApprovedFestivalContext(message) + "\n\n" + getRelevantSchoolData(message, history) }]
         }, contents, generationConfig: { temperature: 0.5, maxOutputTokens: 1200 }
       };
-      const chatLimit = await admitted(env, request, "chat", headers);
-      if (chatLimit) return chatLimit;
-      const work = () => withLocalQueue(() => requestGemini(endpoint, env.GEMINI_API_KEY, payload));
-      // Deduplicate simultaneous identical requests within the same isolate.
+      // Deduplicate simultaneous public requests *before* quota admission.
+      // A single upstream call should count as a single quota admission.
       const dedupeKey = cacheable ? await hashString(JSON.stringify(cacheKeyData)) : null;
       let promise = dedupeKey && sharedRequests.get(dedupeKey);
       if (!promise) {
-        promise = work();
+        promise = (async () => {
+          const quotaResponse = await admitted(env, request, "chat", headers);
+          if (quotaResponse) return { quotaResponse };
+          return withLocalQueue(() => requestGemini(endpoint, env.GEMINI_API_KEY, payload));
+        })();
         if (dedupeKey) {
           sharedRequests.set(dedupeKey, promise);
           promise.finally(() => { if (sharedRequests.get(dedupeKey) === promise) sharedRequests.delete(dedupeKey); }).catch(() => {});
         }
       }
-      const { response, result } = await promise;
+      const outcome = await promise;
+      if (outcome.quotaResponse) return outcome.quotaResponse;
+      const { response, result } = outcome;
       if (!response.ok) {
         trackProviderError(env,request,response.status,ctx);
         console.error("Gemini API Error:", { model, httpStatus: response.status, providerStatus: result?.error?.status });
