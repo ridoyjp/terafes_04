@@ -183,9 +183,23 @@ function safeFaq(message, language) {
     if (language === 'en-US') return 'Tokyo Technical College (TTC) is a vocational college in Tokyo, Japan. Check its official website for the latest courses and admissions: https://tec.ttc.ac.jp/';
     return '東京テクニカルカレッジ（TTC）は東京都にある専門学校です。学科・入学に関する最新情報は公式サイトをご確認ください：https://tec.ttc.ac.jp/';
   }
+  // Never invent unapproved 2026 event details. This FAQ is available even
+  // during provider outages and does not call Gemini.
+  if (/^(?:学校の公式サイト|公式サイト|official website|school website|স্কুলের ওয়েবসাইট)[？?。 ]*$/i.test(q)) {
+    return language === 'bn-BD' ? 'স্কুলের অফিসিয়াল ওয়েবসাইট: https://tec.ttc.ac.jp/' :
+      language === 'en-US' ? 'Official school website: https://tec.ttc.ac.jp/' :
+      '学校の公式サイトはこちらです：https://tec.ttc.ac.jp/';
+  }
   return null;
 }
 
+function publicSchoolQuestion(q) {
+  // Cache only public, non-personal, single-turn school/festival inquiries.
+  const text = String(q || '').trim();
+  const school = /TTC|東京テクニカル|学校|学園祭|文化祭|東中野|校舎|学科|学校祭|専門学校|festival|tokyo technical college|school website|college|স্কুল|কলেজ|উৎসব/i.test(text);
+  const sensitive = /@|https?:|\d{5,}|パスワード|住所は|私の|個人|電話番号|メール|my |mine|আমার|password|email|address|account|secret|token/i.test(text);
+  return !!school && !sensitive && text.length <= 140;
+}
 
 // Shared quota protection: all Cloudflare Worker isolates consult one SQLite Durable Object.
 // Counters only; never store raw IP, chat text, audio or Gemini keys.
@@ -193,15 +207,35 @@ export class FestivalQuota {
   constructor(ctx) {
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS counters (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS faq_cache (key TEXT PRIMARY KEY, reply TEXT NOT NULL, expires INTEGER NOT NULL)');
   }
   async fetch(request) {
-    const { action, client, kind, limits } = await request.json();
+    const { action, client, kind, limits, cacheKey, reply, ttl } = await request.json();
     const now = new Date();
     const day = now.toISOString().slice(0, 10);
     const minute = now.toISOString().slice(0, 16);
     const get = key => this.sql.exec('SELECT count FROM counters WHERE bucket=?', key).one()?.count || 0;
     if (action === 'stats') {
-      return Response.json({ day, admittedToday:get('a:'+day), blockedToday:get('b:'+day), chatToday:get('chat:'+day), voiceToday:get('voice:'+day), provider429Today:get('p429:'+day), providerErrorsToday:get('perr:'+day), currentMinute:get('m:'+minute) });
+      return Response.json({ day, admittedToday:get('a:'+day), blockedToday:get('b:'+day), chatToday:get('chat:'+day), voiceToday:get('voice:'+day), provider429Today:get('p429:'+day), providerErrorsToday:get('perr:'+day), currentMinute:get('m:'+minute), faqCacheHitsToday:get('hit:'+day), faqCacheStoresToday:get('store:'+day),
+        note:'Worker-side counters, not Google AI Studio usage. Daily counters reset at UTC midnight.' });
+    }
+    if (action === 'cache_get') {
+      if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey)) return Response.json({ hit:false });
+      const row=this.sql.exec('SELECT reply,expires FROM faq_cache WHERE key=?',cacheKey).one();
+      if (!row || row.expires <= Date.now()) return Response.json({hit:false});
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1','hit:'+day);
+      return Response.json({hit:true,reply:row.reply});
+    }
+    if (action === 'cache_put') {
+      if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey) || typeof reply !== 'string' || reply.length>5000 || !reply || !Number.isInteger(ttl) || ttl<60 || ttl>1800) return Response.json({ok:false},{status:400});
+      this.sql.exec('INSERT INTO faq_cache(key,reply,expires) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET reply=excluded.reply,expires=excluded.expires',cacheKey,reply,Date.now()+ttl*1000);
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1','store:'+day);
+      // Bound old cache & counter growth. Incremental cleanup avoids per-request writes.
+      if (Math.random()<0.04) {
+        this.sql.exec('DELETE FROM faq_cache WHERE expires < ?',Date.now());
+        this.sql.exec("DELETE FROM counters WHERE bucket LIKE 'u:%' AND bucket < ?",'u:'+new Date(Date.now()-3*86400000).toISOString().slice(0,10));
+      }
+      return Response.json({ok:true});
     }
     if (action === 'event') {
       const key = (kind === '429' ? 'p429:' : 'perr:') + day;
@@ -227,7 +261,7 @@ function quotaStub(env) {
   return env.FESTIVAL_QUOTA.get(env.FESTIVAL_QUOTA.idFromName('festival-global-v1'));
 }
 const clampLimit=(value,fallback)=>Math.max(1,Math.min(100000,Number(value)||fallback));
-async function quotaAction(env, request, kind='chat', action='admit') {
+async function quotaAction(env, request, kind='chat', action='admit', additional={}) {
   const address = request.headers.get('CF-Connecting-IP') || 'unknown';
   const secret = env.RATE_LIMIT_SALT || env.GEMINI_API_KEY || 'not-configured';
   const client = (await hashString(secret+':'+address)).slice(0,20);
@@ -237,7 +271,7 @@ async function quotaAction(env, request, kind='chat', action='admit') {
     userMinute:clampLimit(env.USER_REQUESTS_PER_MINUTE,6),
     userDay:clampLimit(env.USER_REQUESTS_PER_DAY,50)
   };
-  const result=await quotaStub(env).fetch('https://quota.internal/',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,kind,client,limits})});
+  const result=await quotaStub(env).fetch('https://quota.internal/',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,kind,client,limits,...additional})});
   if(!result.ok) throw Object.assign(new Error('QUOTA_UNAVAILABLE'),{status:503});
   return result.json();
 }
@@ -287,6 +321,8 @@ export default {
       });
     }
 
+    // Admin reads are token-authenticated. No browser cross-origin response
+    // permissions are granted to unknown Origins, even with a valid token.
     // Private, read-only monitoring. Never expose counters to the public site.
     if (url.pathname === "/admin/usage") {
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, headers);
@@ -435,13 +471,22 @@ export default {
     }
     // Cache exact single-turn, short, non-personal prompts only. Never cache
     // conversation histories or text containing likely personal information.
-    const cacheable = history.length === 0 && message.length <= 180 &&
-      !/(?:@|https?:|\b\d{7,}\b|password|パスワード|電話番号|メールアドレス|住所は|my name|私の名前|আমার নাম)/i.test(message);
+    const cacheable = history.length === 0 && publicSchoolQuestion(message);
     const cacheKeyData = { v: 1, model, message: message.normalize('NFKC').toLowerCase(), language: effectiveResponseLanguage,
       festivalVersion: FESTIVAL_DATA.last_verified || FESTIVAL_DATA.status,
       schoolVersion: '2026-10-19' };
     const cached = cacheable ? await cacheRead(request, 'chat', cacheKeyData) : { cacheKey: null, data: null };
     if (cached.data?.reply) return json(cached.data, 200, headers);
+    const sharedKey = cacheable ? await hashString('public-faq-v2:' + JSON.stringify(cacheKeyData)) : null;
+    if (sharedKey) {
+      try {
+        const result = await quotaAction(env, request, 'chat', 'cache_get', { cacheKey:sharedKey });
+        if (result.hit && typeof result.reply === 'string') {
+          if (cached.cacheKey) await cacheWrite(cached.cacheKey,{reply:result.reply},900,ctx);
+          return json({reply:result.reply},200,headers);
+        }
+      } catch (error) { console.warn('Shared cache unavailable:',error?.name); }
+    }
     const targetLanguage = LANGUAGE_NAMES[effectiveResponseLanguage] || "the language of the latest user message";
     const languageRule = `
 CRITICAL OUTPUT LANGUAGE POLICY:
@@ -532,7 +577,10 @@ Your final answer should directly address the latest question; no unrelated fest
       }
 
       const resultData = { reply: reply.slice(0, 5000) };
-      if (cacheable) await cacheWrite(cached.cacheKey, resultData, 1800, ctx);
+      if (cacheable) {
+        await cacheWrite(cached.cacheKey,resultData,900,ctx);
+        if (sharedKey) ctx?.waitUntil?.(quotaAction(env,request,'chat','cache_put',{cacheKey:sharedKey,reply:resultData.reply,ttl:900}).catch(()=>{}));
+      }
       return json(resultData, 200, headers);
 
     } catch (error) {

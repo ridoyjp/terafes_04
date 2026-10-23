@@ -792,6 +792,13 @@ async function startRecording() {
     recordingStartedAt = performance.now();
     setListening(true);
     voiceMessage(`🎙️ 話してください。約${SILENCE_MS / 1000}秒の無音で録音終了（最大${MAX_RECORD_MS / 1000}秒）。`);
+    // Mobile browsers sometimes revoke the microphone on lock/call/device change.
+    // End the recording cleanly rather than leaving an indefinitely active button.
+    for (const track of recordingStream.getAudioTracks()) {
+      track.addEventListener('ended', () => {
+        if (recorder?.state === 'recording') stopRecording();
+      }, {once:true});
+    }
     startSilenceDetection(recordingStream);
     // Guaranteed upper bound even if iOS suspends Web Audio analysis.
     recordingTimer = setTimeout(() => {
