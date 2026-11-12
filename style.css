@@ -589,3 +589,182 @@ select {
 
 /* No bow: robot gently floats, blinks and lip-syncs only. */
 .intro .welcome-robot-stage.is-bowing { animation: none !important; }
+
+/* TTC FESTIVAL 2026: school XLSX floor guide inside 情報一覧 only. */
+.info-list .floor-guide{margin:13px 0 18px;padding:13px;border:1px solid #c5e2f3;background:#f8fcff;border-radius:15px}
+.info-list .floor-guide-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.info-list .floor-guide-heading h3{font-size:15px;line-height:1.4;margin:0;color:#164e7c}
+.info-list .floor-guide-heading span{font-size:11px;font-weight:750;color:#42718d}
+.info-list .floor-guide-source{font-size:12px;line-height:1.5;margin:8px 0 11px;color:#46657a}
+.info-list .floor-guide-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 13px}
+.info-list .floor-guide-tab{border:1px solid #bfdbea;border-radius:999px;padding:6px 11px;background:#fff;color:#175d82;font-size:12px;font-weight:750;cursor:pointer}
+.info-list .floor-guide-tab[aria-pressed="true"]{background:#1379a8;border-color:#1379a8;color:#fff}
+.info-list .floor-guide-group{margin:0 0 13px}
+.info-list .floor-guide-floor{font-size:13px;margin:7px 0;color:#145b84}
+.info-list .floor-guide-card{border:1px solid #d9e9f4;border-radius:10px;background:#fff;padding:10px 12px;margin:6px 0;overflow-wrap:anywhere}
+.info-list .floor-guide-room{display:block;font-size:12px;color:#0e78a6;margin-bottom:5px}
+.info-list .floor-guide-description{font-size:13px;line-height:1.6;font-weight:650;white-space:pre-line;color:#234b63}
+.info-list .floor-guide-detail{font-size:11px;line-height:1.6;color:#59758a;margin-top:5px;white-space:pre-line}
+.info-list .floor-guide-time{color:#176c76}
+@media(max-width:560px){.info-list .floor-guide{padding:10px}.info-list .floor-guide-tab{font-size:11px;padding:6px 9px}}
+
+/* Floor shortcut buttons open chat replies; match the existing info quick buttons. */
+.info-list .floor-guide-tab{transition:background .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease}
+.info-list .floor-guide-tab:hover{background:#e8f6fc;border-color:#69b9d9;box-shadow:0 5px 13px #02557720;transform:translateY(-2px)}
+.info-list .floor-guide-tab:active{transform:translateY(0) scale(.97)}
+.info-list .floor-guide-tab:focus-visible{outline:3px solid #0c79c4;outline-offset:3px}
+.info-list .floor-guide-cards[hidden]{display:none!important}
+
+/* TTC FESTIVAL 2026: all 21 official worksheet entries, browsable by type and by room. */
+.info-list .festival-category-panel,.info-list .festival-event-index{background:#f8fcff;border:1px solid #c5e2f3;border-radius:15px;padding:13px;margin:12px 0}
+.info-list .festival-section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.info-list .festival-section-title h3{font-size:15px;margin:0;color:#164e7c}
+.info-list .festival-section-title span{font-size:11px;font-weight:700;color:#537b92}
+.info-list .festival-category-panel p{font-size:12px;line-height:1.5;margin:8px 0 11px;color:#46657a}
+.info-list .festival-category-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:8px}
+.info-list .festival-category-button{background:#fff;border:1px solid #bfdbea;color:#175d82;border-radius:12px;padding:11px 12px;text-align:left;line-height:1.4;font:700 12px system-ui,"Noto Sans JP",sans-serif;cursor:pointer}
+.info-list .festival-category-button:first-child{background:#e4f5fc;border-color:#90cce8;color:#0d587b}
+.info-list .festival-category-button:hover,.info-list .festival-event-button:hover{background:#e1f4ff;border-color:#71bfd9;box-shadow:0 5px 12px #02557718;transform:translateY(-1px)}
+.info-list .festival-category-button:active,.info-list .festival-event-button:active{transform:scale(.985)}
+.info-list .festival-category-button:focus-visible,.info-list .festival-event-button:focus-visible{outline:3px solid #0c79c4;outline-offset:2px}
+.info-list .festival-event-floor{margin-top:11px;padding-top:9px;border-top:1px solid #e0eff7}
+.info-list .festival-event-floor h5{color:#11648d;font-size:13px;margin:0 0 7px}
+.info-list .festival-event-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px}
+.info-list .festival-event-button{background:white;border:1px solid #d1e6ef;color:#225a77;border-radius:9px;padding:9px 10px;text-align:left;font:650 12px/1.45 system-ui,"Noto Sans JP",sans-serif;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:560px){.info-list .festival-category-panel,.info-list .festival-event-index{padding:10px}.info-list .festival-category-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}.info-list .festival-category-button{padding:10px 8px;font-size:11px}.info-list .festival-event-items{grid-template-columns:1fr}}
+
+
+/* 2026 school XLSX: quick user-friendly lookup + all 21 original records */
+.info-list .festival-quick-find{margin:11px 0;padding:13px;border:1px solid #b7ddeb;background:#f8fcff;border-radius:15px}
+.info-list .festival-search-label{display:block;font-size:12px;font-weight:700;color:#3a6989;margin:10px 0 7px}
+.info-list .festival-search-row{display:flex;gap:8px;width:100%}
+.info-list .festival-search-row input{min-width:0;flex:1;border:1.5px solid #a8cde5;background:white;color:#174665;border-radius:12px;padding:12px 13px;font-size:15px;outline:none}
+.info-list .festival-search-row input:focus-visible{border-color:#078ba8;box-shadow:0 0 0 3px #078ba823}
+.info-list .festival-search-row button{flex:none;border:1px solid #bddbeb;background:#e5f4fc;color:#135a7f;border-radius:12px;padding:10px 12px;font-weight:750;cursor:pointer}
+.info-list .festival-search-status{font-size:12px;line-height:1.6;color:#3b718d;margin:8px 0 0}
+.info-list .festival-search-results[hidden]{display:none!important}
+.info-list .festival-search-results{max-height:35dvh;overflow-y:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:7px;padding:10px 2px 2px}
+.info-list .festival-search-heading{grid-column:1/-1;color:#165d83;font-size:12px;font-weight:850;margin:8px 0 1px}
+.info-list .festival-search-button,.info-list .festival-source-button{background:white;border:1px solid #c0dfea;color:#1d5877;border-radius:11px;padding:11px 12px;text-align:left;font:700 12px/1.6 system-ui,"Noto Sans JP",sans-serif;cursor:pointer;overflow-wrap:anywhere;min-height:44px}
+.info-list .festival-search-button:hover,.info-list .festival-source-button:hover{background:#e6f8fc;border-color:#4fa9ce;transform:translateY(-1px)}
+.info-list .festival-search-button:focus-visible,.info-list .festival-source-button:focus-visible,.info-list .festival-search-row button:focus-visible{outline:3px solid #0c79c4;outline-offset:2px}
+.info-list .festival-original-records{margin:13px 0;padding:13px;background:#f8fcff;border:1px solid #c5e2f3;border-radius:15px}
+.info-list .festival-original-records summary{cursor:pointer;list-style-position:inside;font-size:14px;font-weight:800;color:#165f88;min-height:44px;display:list-item;align-content:center}
+.info-list .festival-original-records summary span{font-size:12px;color:#52788e;margin-left:7px}
+.info-list .festival-source-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:7px}
+@media(max-width:560px){.info-list .festival-quick-find{padding:10px}.info-list .festival-search-results,.info-list .festival-source-buttons{grid-template-columns:1fr}.info-list .festival-search-row input{font-size:16px}.info-list .festival-search-button,.info-list .festival-source-button{font-size:13px}.info-list .festival-search-results{max-height:32dvh}}
+
+
+/* 2026 TTC XLSX: room-by-room quick chat selection. */
+.info-list .festival-rooms-panel{margin:12px 0;padding:14px;border:1px solid #bedfec;background:#f8fcff;border-radius:15px}
+.info-list .festival-rooms-note,.info-list .festival-room-caution{font-size:12px;line-height:1.6;color:#496c84;margin:8px 0 12px}
+.info-list .festival-room-caution{margin:10px 0 0;font-size:11px}
+.info-list .festival-room-floor{padding:10px 0 8px;border-top:1px solid #dfedf4}
+.info-list .festival-room-floor:first-child{border-top:0}
+.info-list .festival-room-floor h4{font-size:13px;font-weight:800;color:#135a80;margin:0 0 9px}
+.info-list .festival-room-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px}
+.info-list .festival-room-button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:62px;background:white;border:1px solid #c8deeb;border-radius:12px;padding:11px 12px;text-align:left;cursor:pointer;overflow-wrap:anywhere;transition:background .15s,border-color .15s;font-family:inherit}
+.info-list .festival-room-button:hover{background:#e8f6fc;border-color:#59add0}
+.info-list .festival-room-button:focus-visible{outline:3px solid #0c79c4;outline-offset:2px}
+.info-list .festival-room-location{font-size:13px;color:#086d9b;font-weight:800}
+.info-list .festival-room-preview{font-size:12px;line-height:1.45;color:#2a5672;font-weight:600}
+@media(max-width:600px){.info-list .festival-rooms-panel{padding:10px}.info-list .festival-room-grid{grid-template-columns:1fr}.info-list .festival-room-button{min-height:56px;padding:10px 12px}.info-list .festival-room-location{font-size:14px}}
+
+/* Improved full-school-sheet navigation: show ALL activities per location. */
+.info-list .festival-sheet-summary{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 7px}
+.info-list .festival-sheet-summary span{font-size:11px;font-weight:750;line-height:1.4;border-radius:100px;background:#e8f5fa;color:#135b83;padding:7px 10px;border:1px solid #c7dfec}
+.info-list .festival-room-activity-list{display:flex;flex-wrap:wrap;gap:5px;align-items:flex-start}
+.info-list .festival-room-activity-chip{display:inline-flex;align-items:center;padding:5px 7px;background:#eef6fd;border:1px solid #cce2f3;border-radius:7px;font-size:12px;line-height:1.35;white-space:normal;overflow-wrap:anywhere;color:#174466;font-weight:650}
+.info-list .festival-room-button:hover .festival-room-activity-chip{background:#fff}
+.info-list .festival-room-schedule{font-size:11px;color:#35657f;font-weight:600;line-height:1.55;margin-top:3px}
+.info-list .festival-room-button{gap:7px;align-items:stretch}
+@media(max-width:600px){.info-list .festival-sheet-summary{gap:5px}.info-list .festival-sheet-summary span{font-size:10px;padding:6px 8px}.info-list .festival-room-grid{grid-template-columns:minmax(0,1fr)}.info-list .festival-room-activity-chip{font-size:12px}}
+
+
+/* Professional guided festival navigation: five choices, contextual follow-ups */
+.info-list.festival-simple-menu{max-height:min(430px,65dvh)!important;overflow-y:auto!important;background:#f5faff!important;padding:17px clamp(12px,3vw,26px)!important;border-bottom:1px solid #d0e6f2!important}
+.festival-simple-menu .info-title{font-size:17px!important;line-height:1.45;color:#0e426d!important}
+.festival-simple-menu .festival-menu-lead{font-size:13px!important;color:#517085!important;margin:7px 0 14px!important}
+.festival-main-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;max-width:1060px}
+.festival-main-grid button{appearance:none;display:flex;align-items:center;gap:10px;text-align:left;min-height:65px;padding:12px 15px;border-radius:14px;background:#fff;border:1px solid #d4e5f1;color:#194763;font:750 14px/1.35 system-ui,"Noto Sans JP",sans-serif;cursor:pointer;box-shadow:0 2px 7px #164f7310;transition:background .16s,border-color .16s,transform .16s}
+.festival-main-grid button:hover{background:#e9f7ff;border-color:#6db7d7;transform:translateY(-1px)}
+.festival-main-grid button:focus-visible,.festival-smart-suggestions button:focus-visible{outline:3px solid #1593cb!important;outline-offset:2px}
+.festival-main-icon{font-size:22px;flex:none}
+.festival-main-grid small{display:block;margin-top:4px;color:#657e93;font-size:11px;font-weight:500}
+.festival-simple-menu .festival-official-note{font-size:11px!important;line-height:1.5;color:#5d788c;margin:12px 0 0!important}
+.festival-smart-suggestions{flex:0 0 auto;background:#fff;border-top:1px solid #e1eaf1;padding:11px max(15px,calc((100vw - 1100px)/2));box-shadow:0 -8px 24px rgba(32,84,118,.045);z-index:1}
+.festival-smart-suggestions[hidden]{display:none!important}
+.festival-smart-top{display:flex;align-items:center;justify-content:space-between;gap:12px;font:750 12px/1.4 system-ui,"Noto Sans JP",sans-serif;color:#346686;margin-bottom:8px}
+#festivalSuggestionCounter{font-size:11px;color:#74899a;font-weight:600}
+.festival-smart-choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.festival-suggestion-chip{border:1px solid #cbe1f0;background:#f3f9fd;color:#134f74;font:700 12px/1.45 system-ui,"Noto Sans JP",sans-serif;border-radius:11px;min-width:0;min-height:42px;padding:8px 11px;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer;transition:background .15s,transform .15s}
+.festival-suggestion-chip:hover{background:#dcf2fd;border-color:#77b9d5;transform:translateY(-1px)}
+.festival-smart-controls{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end;margin-top:8px}
+.festival-smart-controls:empty{display:none}
+.festival-suggestion-control{background:none;border:1px solid #d9e7f0;border-radius:8px;padding:5px 10px;color:#54758d;font:700 11px system-ui,"Noto Sans JP",sans-serif;cursor:pointer;min-height:32px}
+.festival-suggestion-control:hover{background:#edf7fc}
+.festival-suggestion-next{background:#dff2fd;color:#125b7c;border-color:#b5dcec}
+@media(max-width:800px){.festival-smart-suggestions{padding:9px 13px}.festival-smart-choices{grid-template-columns:repeat(2,minmax(0,1fr))}.festival-suggestion-chip{font-size:12px;min-height:44px;padding:8px 10px}}
+@media(max-width:560px){.info-list.festival-simple-menu{max-height:55dvh!important;padding:13px!important}.festival-main-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.festival-main-grid button{min-height:67px;padding:10px;gap:6px;font-size:12px}.festival-main-grid small{font-size:10px}.festival-main-icon{font-size:19px}.festival-smart-top{font-size:11px;margin-bottom:6px}.festival-smart-suggestions{padding:8px 10px}.festival-smart-choices{gap:6px}.festival-suggestion-chip{font-size:11px;line-height:1.4;min-height:41px}.festival-smart-controls{margin-top:6px}.festival-suggestion-control{min-height:30px;font-size:10px}.chat .messages{min-height:0!important}.festival-smart-suggestions{max-height:34dvh;overflow-y:auto}}
+@media(max-height:570px) and (max-width:800px){.festival-smart-suggestions{max-height:28dvh;overflow-y:auto}.festival-smart-choices{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.festival-main-grid button,.festival-suggestion-chip{transition:none!important;transform:none!important}}
+/* When the information menu is open, hide duplicate suggestion chips. */
+.info-list:not([hidden]) ~ .festival-smart-suggestions{display:none!important}
+
+/* Menu-only navigation: requested removal of all chat-bottom suggestion buttons. */
+.festival-main-grid[hidden]{display:none!important}
+.info-list.festival-simple-menu .festival-smart-suggestions{
+  display:block;
+  max-height:none;
+  overflow:visible;
+  padding:8px 0 0;
+  margin:0;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  position:static;
+  z-index:auto;
+}
+.info-list.festival-simple-menu .festival-smart-suggestions[hidden]{display:none!important}
+.info-list.festival-simple-menu .festival-smart-choices{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+}
+.info-list.festival-simple-menu .festival-smart-controls{margin-top:12px}
+.info-list.festival-simple-menu .festival-suggestion-chip{min-height:48px}
+.info-list.festival-simple-menu{max-height:min(520px,65dvh)!important;overflow-y:auto!important}
+@media(max-width:600px){
+  .info-list.festival-simple-menu{max-height:56dvh!important}
+  .info-list.festival-simple-menu .festival-smart-choices{grid-template-columns:minmax(0,1fr);gap:7px}
+  .info-list.festival-simple-menu .festival-suggestion-chip{min-height:43px}
+}
+
+/* Show all choices on one scrollable page, with back-only navigation. */
+.info-list.festival-simple-menu .festival-smart-suggestions{max-height:none!important;overflow:visible!important}
+.info-list.festival-simple-menu .festival-smart-controls{justify-content:flex-start}
+
+/* School-data-only quick shortcuts */
+.topics {display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.topics .festival-quick-link {
+  border:1px solid #c6e2f0;border-radius:16px;background:#eff9fd;
+  color:#125479;font:inherit;font-weight:700;padding:13px 20px;
+  min-height:48px;cursor:pointer;box-shadow:0 4px 15px rgba(13,75,112,.05);
+}
+.topics .festival-quick-link:hover,
+.topics .festival-quick-link:focus-visible {background:#d9f3fb;outline-offset:2px}
+@media(max-width:600px){
+ .topics {gap:8px}
+ .topics .festival-quick-link {padding:10px 12px;font-size:13px;min-height:44px}
+}
+
+
+/* Icon-only refresh: keep original intro buttons, spacing and blue theme. */
+.intro-feature .intro-button-icon {
+  width: 1.12em;
+  height: 1.12em;
+  display: inline-block;
+  vertical-align: -0.17em;
+  margin-right: 0.22em;
+  flex-shrink: 0;
+}

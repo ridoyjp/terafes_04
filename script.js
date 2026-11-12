@@ -15,17 +15,394 @@ function setInfo(open) {
   infoToggle.setAttribute("aria-expanded", String(open));
 }
 
+// Keep the information panel as one view: after leaving a menu, its nested
+// category must not reappear when returning from the landing page.
+function resetInfoMenu() {
+  if (typeof window.resetFestivalInfoMenu === "function") {
+    window.resetFestivalInfoMenu();
+  }
+}
+function closeInfoMenu() {
+  setInfo(false);
+  resetInfoMenu();
+}
+
 infoToggle.addEventListener("click", () => {
-  setInfo(infoList.hidden);
+  if (infoList.hidden) {
+    resetInfoMenu();
+    setInfo(true);
+  } else {
+    closeInfoMenu();
+  }
 });
 
-document.getElementById("infoClose").addEventListener("click", () => {
-  setInfo(false);
-});
+document.getElementById("infoClose").addEventListener("click", closeInfoMenu);
 
 document.querySelectorAll("#infoList [data-q]").forEach(button => {
-  button.addEventListener("click", () => setInfo(false));
+  button.addEventListener("click", closeInfoMenu);
 });
+
+// ---------- SCHOOL-SUPPLIED 2026 FESTIVAL GUIDE ----------
+// The school XLSX has 21 location records. Several records list multiple
+// activities. Each named activity gets its own button with the source room.
+// Names below are exact phrases extracted from the source descriptions.
+(function initFestivalFloorGuide() {
+  const guide = window.TTC_FLOOR_GUIDE;
+  const floorTabs = document.getElementById("floorGuideTabs");
+  const categoryTabs = document.getElementById("festivalCategoryButtons");
+  const eventTabs = document.getElementById("festivalEventButtons");
+  const sourceTabs = document.getElementById("festivalSourceButtons");
+  const roomTabs = document.getElementById("festivalRoomButtons");
+  const searchInput = document.getElementById("festivalQuickSearch");
+  const searchClear = document.getElementById("festivalSearchClear");
+  const searchStatus = document.getElementById("festivalSearchStatus");
+  const searchResults = document.getElementById("festivalSearchResults");
+  if (!guide || !document.getElementById("festivalMainOptions")) return;
+  const tidy = s => String(s || "").replace(/\n/g, "・").trim();
+
+  // Tags are website navigation labels, NOT official school categories.
+  const categoryTypes = [
+    {id:"games", label:"🎮 ゲーム・遊び"},
+    {id:"food", label:"🍰 フード・カフェ"},
+    {id:"ai", label:"🤖 AI・科学・IT"},
+    {id:"craft", label:"🧩 ものづくり・体験"},
+    {id:"show", label:"🖼️ 展示・発表"},
+    {id:"build", label:"🏠 建築・インテリア"},
+    {id:"art", label:"🎨 アート・デザイン"},
+    {id:"help", label:"ℹ️ 相談・施設"}
+  ];
+
+  // Every label must exist verbatim in the referenced XLSX description.
+  // For combined phrases (e.g. マイクラ＆カプラ), use exact source substrings.
+  const activityIndex = {
+    "B2": [
+      ["3Dプリンター体験", "ai", "craft"],
+      ["IoTセンサー可視化体験", "ai", "craft"]
+    ],
+    "E2": [
+      ["データサイエンス体験ブース", "ai", "craft"],
+      ["異文化交流ボドゲカフェ", "games"]
+    ],
+    "E3": [["学習成果展示", "show"]],
+    "B4": [
+      ["マイクラ", "games", "build", "craft"],
+      ["カプラ", "games", "build", "craft"],
+      ["ストロービルディング", "build", "craft"]
+    ],
+    "B5": [["風船プール", "games"], ["バルーンアート", "art", "craft"]],
+    "E5": [["模型体験コーナー", "build", "craft"]],
+    "B6": [["ヒンメリ作成", "art", "craft"]],
+    "B7": [["学生が作ったゲーム展示&プレイ体験", "games", "show"]],
+    "F7": [["2年生のゲーム制作物の発表", "games", "show"]],
+    "B8": [["ミニゆるメカトロ in TTC Festival 2026", "ai", "craft"]],
+    "F8": [["パーソナルカラー診断", "art", "craft"]],
+    "B9": [
+      ["1年展示：ホームページ制作展示と閲覧", "ai", "show"],
+      ["2年展示：生成ＡＩを使ったアプリ展示と閲覧", "ai", "show"],
+      ["生成AIによる目押しゲーム", "ai", "games"],
+      ["ゲームをして、お菓子をＧｅｔ！", "games"]
+    ],
+    "E9": [["スクリーンアトラクション", "games", "craft"]],
+    "E10": [["学生作品展示", "show"]],
+    "B11": [["クイズ「何の動物？」", "games", "craft"]],
+    "E11": [
+      ["RJP活動報告", "show"],
+      ["バスボム作り", "craft"],
+      ["カゼインプラスチック作り", "ai", "craft"],
+      ["カラメル作り体験", "craft"],
+      ["ステンドグラスクッキー作り体験", "craft", "art"],
+      ["オリジナル小瓶クラフト", "craft", "art"]
+    ],
+    "C12": [["コーヒーコーナー", "food"]],
+    "D12": [["世界のお菓子コーナー", "food"]],
+    "F12": [["入学相談コーナー", "help"]],
+    "G12": [["エコステーション", "help"]],
+    "B13": [["建築系学科 成果展示会", "build", "show"]]
+  };
+
+  const activities = [];
+  for (const entry of guide.entries) {
+    const source = entry.source_cells?.[0];
+    const parts = activityIndex[source];
+    if (!parts) {
+      console.error("Missing festival activity mapping", source);
+      continue;
+    }
+    for (const [name, ...categories] of parts) {
+      if (!entry.description.includes(name)) {
+        console.error("Festival activity mismatch with school XLSX", source, name);
+        continue;
+      }
+      activities.push({name, categories, entry});
+    }
+  }
+  // Available for transparent verification/testing; this is read-only source
+  // data and not a remote API or separate school event list.
+  window.TTC_FESTIVAL_ACTIVITIES = activities;
+  const count = document.getElementById("floorGuideCount");
+  if (count) count.textContent = `${guide.floors.length}フロア・${guide.entries.length}項目`;
+  const activityCount = document.getElementById("festivalActivityCount");
+  if (activityCount) activityCount.textContent = `${activities.length}企画`;
+
+  function roomName(entry) {
+    return entry.room ? `／${tidy(entry.room)}${/^[0-9\s\n]+$/.test(entry.room) ? "号室" : ""}` : "（部屋番号の記載なし）";
+  }
+  function parentDetails(entry) {
+    const dept = entry.department ? `\n担当：${tidy(entry.department)}` : "";
+    const schedule = entry.schedule ? `\n記載日時：${tidy(entry.schedule)}` : "";
+    return `${dept}${schedule}`;
+  }
+  function floorAnswer(entries) {
+    if (!entries.length) return "学校資料には該当する情報がありません。";
+    return "📍 TTC FESTIVAL 2026 学校提供フロアガイド\n\n" + entries.map(e =>
+      `■ ${e.floor}${roomName(e)}\n${e.description}${parentDetails(e)}`
+    ).join("\n\n") + "\n\n※ 学校資料にない会場情報・料金は推測していません。";
+  }
+  function activityAnswer(items) {
+    if (!items.length) return "学校資料には該当する企画がありません。";
+    return "📍 TTC FESTIVAL 2026 企画案内\n\n" + items.map(a => {
+      const e = a.entry;
+      // Show complete school-supplied description as well as the selected
+      // activity, so no associated instructions/times are silently dropped.
+      return `■ ${a.name}\n場所：${e.floor}${roomName(e)}${parentDetails(e)}\n学校資料の内容：${e.description}`;
+    }).join("\n\n") + "\n\n※ 部屋・日時が記載されていない場合は推測していません。";
+  }
+
+  function makeButton(parent, label, question, response, kind) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = kind;
+    btn.textContent = label;
+    btn.setAttribute("aria-label", `${label}の場所と内容をチャットで確認`);
+    btn.addEventListener("click", () => {
+      if (pendingChat) return;
+      closeInfoMenu();
+      ask(question, "ja-JP", response);
+    });
+    parent.appendChild(btn);
+    return btn;
+  }
+
+  // Small, conversational menu. Only school-verified information is used.
+  // All 21 source entries and 34 named activities remain available through
+  // progressive suggestions instead of rendering 80+ buttons at once.
+  const roomChoices = guide.entries.flatMap(entry => {
+    const raw = String(entry.room || "").trim();
+    if (!raw) return [];
+    const split = raw.split(/\s+/u).filter(Boolean);
+    if (split.length === 2 && split.every(x => /^\d{3,4}$/.test(x))) {
+      return split.map(room => ({entry, room, shared: true}));
+    }
+    return [{entry, room: raw.replace(/\s+/gu, ""), shared: false}];
+  });
+  window.TTC_FESTIVAL_ROOM_CHOICES = roomChoices;
+  const mainOptions = document.getElementById("festivalMainOptions");
+  const chips = document.getElementById("festivalSuggestionChoices");
+  const controlBar = document.getElementById("festivalSuggestionControls");
+  const suggestions = document.getElementById("festivalSmartSuggestions");
+  const suggestionTitle = document.getElementById("festivalSuggestionTitle");
+  const suggestionCounter = document.getElementById("festivalSuggestionCounter");
+  const PAGE = 1000;
+  if (!mainOptions || !chips || !controlBar || !suggestions) return;
+
+  const categoryLabel = {
+    games:"ゲーム・体験", food:"フード・カフェ", ai:"AI・展示",
+    floors:"フロア・部屋", all:"すべての企画"
+  };
+  // Room labels are normalized only for readability; location facts still
+  // come from the uploaded school spreadsheet. 405/407 stay jointly listed.
+  const roomDisplay = e => {
+    const raw = String(e.room || "").trim();
+    if (!raw) return "部屋番号未記載";
+    const rooms = raw.split(/\s+/u).filter(Boolean);
+    if (rooms.length > 1 && rooms.every(r => /^\d+$/.test(r))) {
+      return rooms.map(r => `${r}号室`).join("・") + "（一括掲載）";
+    }
+    if (/^\d+$/.test(raw)) return `${raw}号室`;
+    return raw.replace(/\s+/gu, "");
+  };
+  const conciseLocation = e => `${e.floor} ${roomDisplay(e)}`;
+  const sectionIntro = (title, n) => `${title}は${n}件あります\n情報一覧のメニューから選ぶと場所と内容をご案内します`;
+
+  let currentView = null;
+  let previousViews = [];
+  let currentPage = 0;
+
+  function view(title, items, page = 0, keepHistory = true) {
+    if (keepHistory && currentView) {
+      previousViews.push({data:currentView, page:currentPage});
+      if (previousViews.length > 15) previousViews.shift();
+    }
+    currentView = {title, items};
+    currentPage = page;
+    renderSuggestions();
+  }
+  function makeChoice(label, onClick, className = "") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.textContent = label;
+    button.addEventListener("click", () => { if (!pendingChat) onClick(); });
+    return button;
+  }
+  function renderSuggestions() {
+    chips.replaceChildren();
+    controlBar.replaceChildren();
+    if (!currentView) return;
+    const {items,title} = currentView;
+    const atHome = title === "何を調べますか？";
+    // Never add a separate suggestion panel to the chat transcript.
+    // Contextual choices are shown only inside the information menu.
+    mainOptions.hidden = !atHome;
+    suggestions.hidden = atHome;
+    if (atHome) return;
+    // Show all matching options on one scrollable menu page.
+    currentPage = 0;
+    suggestionTitle.textContent = title;
+    suggestionCounter.textContent = "";
+    for (const item of items) {
+      chips.appendChild(makeChoice(item.label, item.action, "festival-suggestion-chip"));
+    }
+    if (previousViews.length) {
+      controlBar.appendChild(makeChoice("↩ 戻る", () => {
+        const previous = previousViews.pop();
+        currentView = previous.data;
+        currentPage = previous.page;
+        renderSuggestions();
+      },"festival-suggestion-control"));
+    }
+
+  }
+  function showHome() {
+    previousViews = [];
+    currentView = {title:"何を調べますか？", items:menuItems};
+    currentPage = 0;
+    renderSuggestions();
+  }
+  // The top 情報一覧 button always returns to the original five choices.
+  window.resetFestivalInfoMenu = showHome;
+  function localChat(question, answerText) {
+    if (pendingChat) return;
+    closeInfoMenu();
+    // The school answer bypasses the AI API and cannot hallucinate a room.
+    window.__ttcGuidedNavigation = true;
+    try { ask(question, "ja-JP", answerText); }
+    finally { window.__ttcGuidedNavigation = false; }
+  }
+  const activityChoice = activity => ({
+    label:`${activity.entry.floor} ${activity.name}`,
+    action:() => {
+      const e = activity.entry;
+      const place = conciseLocation(e);
+      const dept = e.department ? `\n担当 ${tidy(e.department)}` : "";
+      const when = e.schedule ? `\n開催日時 ${tidy(e.schedule)}` : "";
+      const shared = /^405\s+407$/u.test(String(e.room || "").trim()) ? "\n学校の資料では405号室と407号室をまとめて掲載しています\n個別の部屋割りは記載されていません" : "";
+      const unknown = e.room ? "" : "\n部屋番号は学校資料に記載されていません";
+      // A name-only answer can omit official details such as 1F café location,
+      // exhibition contents, joint-room notes or 7F programme times.
+      // Always include the entire, unchanged description from the XLSX row.
+      const sourceDescription = `\n学校資料の記載内容\n${e.description}`;
+      const reply = `${activity.name}\n場所 ${place}${dept}${when}${sourceDescription}${shared}${unknown}`;
+      localChat(`${activity.name}はどこですか`, reply);
+    }
+  });
+  function showActivities(label, filtered) {
+    // Menu navigation stays in the menu; no duplicate chip strip under chat.
+    view(`${label}  ${filtered.length}件`, filtered.map(activityChoice));
+  }
+  function entryAnswer(entry, title) {
+    const notes = entry.room ? "" : "\n部屋番号は学校資料に記載されていません";
+    return `${title}\n場所 ${conciseLocation(entry)}\n${entry.description}${parentDetails(entry)}${notes}`;
+  }
+  function roomChoice(choice) {
+    const e = choice.entry;
+    const place = choice.shared ? `${e.floor} 405号室と407号室の共同掲載` : conciseLocation(e);
+    const note = choice.shared ? "\n学校の資料では405号室と407号室が一緒に掲載されているため各企画の部屋は断定できません" : "";
+    return {
+      label:`${e.floor} ${/^\d+$/.test(choice.room) ? choice.room + "号室" : choice.room}`,
+      action: () => localChat(`${place}には何がありますか`, `${place}\n${e.description}${parentDetails(e)}${note}`)
+    };
+  }
+  const floorChoice = floor => ({
+    label:`🏢 ${floor}`,
+    action: () => {
+      const rooms = roomChoices.filter(c => c.entry.floor === floor);
+      const sameFloor = activities.filter(a => a.entry.floor === floor);
+      const options = rooms.length ? rooms.map(roomChoice) : sameFloor.map(activityChoice);
+      // Retain school activities whose room is not listed, without fabricating it.
+      if (rooms.length) options.push(...sameFloor.filter(a => !a.entry.room).map(activityChoice));
+      view(`${floor} の部屋と企画`, options);
+    }
+  });
+  const menuItems = [
+    {label:"🎮 ゲーム・体験", action:() => showActivities("ゲーム・体験", activities.filter(a=>a.categories.includes("games")||a.categories.includes("craft")))},
+    {label:"☕ フード・カフェ", action:() => showActivities("フード・カフェ", activities.filter(a=>a.categories.includes("food")))},
+    {label:"🤖 AI・展示", action:() => showActivities("AI・展示", activities.filter(a=>a.categories.includes("ai")||a.categories.includes("show")))},
+    {label:"🏢 フロア・部屋", action:() => view("フロアを選んでください", guide.floors.map(floorChoice))},
+    {label:"📚 すべての企画", action:() => showActivities("すべての企画",activities)}
+  ];
+  // Quick links reuse the same Excel-grounded information menu actions.
+  document.querySelectorAll("[data-quick-nav]").forEach(button => {
+    button.addEventListener("click", () => {
+      if (pendingChat) return;
+      // Switching a quick category replaces the previously opened menu.
+      resetInfoMenu();
+      setInfo(true);
+      const index = ["games","food","ai","floors","all"].indexOf(button.dataset.quickNav);
+      if (index >= 0) menuItems[index].action();
+    });
+  });
+  mainOptions.querySelectorAll("[data-festival-nav]").forEach(button => {
+    button.addEventListener("click", () => {
+      if (pendingChat) return;
+      const index = ["games","food","ai","floors","all"].indexOf(button.dataset.festivalNav);
+      if (index >= 0) menuItems[index].action();
+    });
+  });
+  showHome();
+
+  // After a typed/voice question, offer a short contextual path instead of
+  // opening a giant static list. No extra network calls are made for chips.
+  window.refreshGuideSuggestionsForQuestion = question => {
+    const q = String(question || "").normalize("NFKC");
+    const roomMatch = q.match(/(?:^|[^0-9])(\d{3,4})(?:号室)?/);
+    if (roomMatch) {
+      const matched = roomChoices.filter(c=>c.room===roomMatch[1]);
+      if (matched.length) {view(`${roomMatch[1]}号室を調べる`,matched.map(roomChoice));return;}
+    }
+    const floorMatch = q.match(/(?:11|10|9|7|6|5|4|1|B1)F/i);
+    if (floorMatch) {
+      const floor = floorMatch[0].toUpperCase();
+      if (guide.floors.includes(floor)) {view(`${floor} のご案内`,[floorChoice(floor)]);return;}
+    }
+    if (/食べ物|フード|カフェ|コーヒー|お菓子|food/i.test(q)) {
+      view("フード・カフェ", activities.filter(a=>a.categories.includes("food")).map(activityChoice));return;
+    }
+    if (/ゲーム|遊び|game/i.test(q)) {
+      view("ゲーム・体験", activities.filter(a=>a.categories.includes("games")).map(activityChoice));return;
+    }
+    if (/AI|展示|IT|情報処理/i.test(q)) {
+      view("AI・展示", activities.filter(a=>a.categories.includes("ai")||a.categories.includes("show")).map(activityChoice));return;
+    }
+    if (/どこ|場所|部屋|フロア/.test(q)) {
+      view("フロアを選んでください",guide.floors.map(floorChoice));return;
+    }
+    showHome();
+  };
+  // The legacy top/side shortcut buttons still answer from the XLSX.
+  window.getTtcFestivalMenuAnswer = question => {
+    const q = String(question || "");
+    if (/食べ物|フード|ドリンク|food/i.test(q)) return sectionIntro("フード・カフェ",activities.filter(a=>a.categories.includes("food")).length);
+    if (/ゲーム|game/i.test(q)) return sectionIntro("ゲーム",activities.filter(a=>a.categories.includes("games")).length);
+    if (/会場の場所|会場案内|会場ガイド|フロアガイド|^場所$/.test(q)) return "案内できるフロアは11F 10F 9F 7F 6F 5F 4F 1F B1Fです\n情報一覧のメニューからフロアを選んでください";
+    return "";
+  };
+  window.TTC_FESTIVAL_NAV_DIAGNOSTICS = Object.freeze({
+    activities:activities.length, records:guide.entries.length,
+    floors:guide.floors.length, namedRooms:roomChoices.length, pageSize:PAGE
+  });
+
+})();
 
 // ---------- PAGE NAVIGATION ----------
 
@@ -33,8 +410,10 @@ document.getElementById("introLogo").src =
   document.querySelector(".head img").src;
 
 function openChat() {
+  // Start Now must never restore an old information category from before Back.
+  closeInfoMenu();
   stopWelcomeSpeech();
-  window.speechSynthesis?.cancel();
+  stopReplySpeech();
   document.getElementById("intro").hidden = true;
   document.getElementById("chat").classList.add("active");
   if (window.matchMedia("(min-width: 901px)").matches) {
@@ -43,12 +422,14 @@ function openChat() {
 }
 
 function closeChat() {
+  // Back means leave the entire chat view, not just the conversation area.
+  closeInfoMenu();
   japaneseOnlyListening = false;
   japaneseOnlyTranscript = "";
   setListening(false);
   stopFastJapaneseRecognition();
   cancelRecording();
-  window.speechSynthesis?.cancel();
+  stopReplySpeech();
   voiceMessage("");
 
   document.getElementById("chat").classList.remove("active");
@@ -70,7 +451,8 @@ document.querySelectorAll("[data-intro-question]").forEach(button => {
   button.addEventListener("click", () => {
     const question = button.dataset.introQuestion;
     openChat();
-    if (question) ask(question);
+    const sheetAnswer = window.getTtcFestivalMenuAnswer?.(question) || "";
+    if (question) ask(question, sheetAnswer ? "ja-JP" : "", sheetAnswer);
   });
 });
 
@@ -80,6 +462,36 @@ const BOT_ICON = "assets/robot-logo.png";
 
 const messages = document.getElementById("messages");
 const input = document.getElementById("input");
+
+// Existing welcome bubble also follows the same readable-text rule.
+
+
+// Chat bubbles show words and room/floor details without decorative noise.
+// Keep line breaks for the 34 festival activities and preserve source data
+// separately for API requests, chat history and the unchanged school XLSX.
+function cleanVisibleChatText(value) {
+  const text = String(value ?? "")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
+    .replace(/https?:\/\/\S+/gi, "ウェブアドレス")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?=\D|$)/g, (_, y, m, d) => `${y}年${Number(m)}月${Number(d)}日`)
+    .replace(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/g, (_, m, d) => `${Number(m)}月${Number(d)}日`)
+    .replace(/(\d{1,2})[:：](\d{2})(?=\D|$)/g, "$1時$2分")
+    .replace(/[\u200c\u200d\ufe0e\ufe0f]/gu, "")
+    .replace(/(?<=[=*_{}|\\])[!?！？](?=[=*_{}|\\])/gu, ""); // decorative != sentence punctuation
+  const japanese = /[\u3040-\u30ff\u3400-\u9fff]/u.test(text);
+  return (japanese ? text.replace(/,/g, "、").replace(/(?<!\d)\.(?!\d)/g, "。").replace(/\?/g, "？").replace(/!/g, "！") : text)
+    .replace(/[^\p{L}\p{M}\p{N}\s、。！？・,.?!]/gu, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([、。！？,.?!])/gu, "$1")
+    .replace(/ *\r?\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+messages.querySelectorAll(".bubble").forEach(bubble => {
+  bubble.textContent = cleanVisibleChatText(bubble.textContent);
+});
 
 function add(text, user = false) {
   const row = document.createElement("div");
@@ -102,7 +514,7 @@ function add(text, user = false) {
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.textContent = text;
+  bubble.textContent = cleanVisibleChatText(text);
 
   row.append(avatar, bubble);
   messages.appendChild(row);
@@ -116,7 +528,7 @@ function answer(question) {
   const q = question.toLowerCase();
 
   if (/食|food|飲|屋台|グルメ|たべ/.test(q)) {
-    return "🍜 食べ物コーナーでは屋台グルメやドリンクを楽しめます。詳しい出店場所・メニューは当日の案内をご確認ください。";
+    return "学校のフロアガイドには1Fのコーヒーコーナーと世界のお菓子コーナーが載っています。メニューや料金は記載されていません。";
   }
 
   if (/ゲーム|game|遊|体験/.test(q)) {
@@ -136,7 +548,7 @@ function answer(question) {
   }
 
   if (/おすすめ|recommend/.test(q)) {
-    return "🎉 屋台グルメ🍜、ゲーム体験🎮、ステージ🎤がおすすめです！どれが気になりますか？";
+    return "学校のフロアガイドに載っている展示や体験は情報一覧から選べます。";
   }
 
   if (/こんにちは|hello|hi/.test(q)) {
@@ -166,10 +578,79 @@ function requestedVoiceLanguage() {
 function isJapaneseRomaji(text) {
   const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
   if (!q || /[\u0080-\uffff]/.test(q)) return false;
-  const japanesePhrases = /\b(?:desu|desuka|desu ka|masu|masuka|masu ka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|dare|doko|itsu|nanji|nani|nan desu|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|gakusai|gakuensai|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|wa dare|wa doko|wa nani|ni tsuite|no koto|tte nani|oshiete kudasai)\b/i;
+  // A Japanese event name inside an English question is still English.
+  if (/\b(?:where|what|when|why|how|please|the|is|are|does|could|would|tell|show|about)\b/.test(q) &&
+      !/\b(?:desu|desuka|masu|masuka|oshiete|kudasai|onegaishimasu)\b/.test(q)) return false;
+  const japanesePhrases = /\b(?:konnichiwa|arigatou|watashi|gakuensai|geemu|kaijou|heya|desu|desuka|desu ka|masu|masuka|masu ka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|dare|doko|itsu|nanji|nani|nan desu|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|gakusai|gakuensai|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|wa dare|wa doko|wa nani|ni tsuite|no koto|tte nani|oshiete kudasai)\b/i;
   const ttcSchoolRomaji = /\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|tokyo technical|higashi nakano)\b/i.test(q);
   const japaneseGrammar = /\b(?:wa|no|ni|de|ga|wo|o)\b/i.test(q);
   return japanesePhrases.test(q) || (ttcSchoolRomaji && japaneseGrammar);
+}
+
+// Small, offline Romaji -> Japanese keyboard helper. English and mixed-script
+// messages are left intact. Full Kanji conversion requires the device's IME.
+const ROMAJI_KANA = Object.freeze({
+  a:"あ",i:"い",u:"う",e:"え",o:"お",ka:"か",ki:"き",ku:"く",ke:"け",ko:"こ",
+  sa:"さ",shi:"し",si:"し",su:"す",se:"せ",so:"そ",ta:"た",chi:"ち",ti:"ち",tsu:"つ",tu:"つ",te:"て",to:"と",
+  na:"な",ni:"に",nu:"ぬ",ne:"ね",no:"の",ha:"は",hi:"ひ",fu:"ふ",hu:"ふ",he:"へ",ho:"ほ",
+  ma:"ま",mi:"み",mu:"む",me:"め",mo:"も",ya:"や",yu:"ゆ",yo:"よ",ra:"ら",ri:"り",ru:"る",re:"れ",ro:"ろ",
+  wa:"わ",wi:"うぃ",we:"うぇ",wo:"を",ga:"が",gi:"ぎ",gu:"ぐ",ge:"げ",go:"ご",
+  za:"ざ",ji:"じ",zi:"じ",zu:"ず",ze:"ぜ",zo:"ぞ",da:"だ",di:"ぢ",du:"づ",de:"で",do:"ど",
+  ba:"ば",bi:"び",bu:"ぶ",be:"べ",bo:"ぼ",pa:"ぱ",pi:"ぴ",pu:"ぷ",pe:"ぺ",po:"ぽ",
+  kya:"きゃ",kyu:"きゅ",kyo:"きょ",sha:"しゃ",shu:"しゅ",sho:"しょ",sya:"しゃ",syu:"しゅ",syo:"しょ",
+  cha:"ちゃ",chu:"ちゅ",cho:"ちょ",tya:"ちゃ",tyu:"ちゅ",tyo:"ちょ",nya:"にゃ",nyu:"にゅ",nyo:"にょ",
+  hya:"ひゃ",hyu:"ひゅ",hyo:"ひょ",mya:"みゃ",myu:"みゅ",myo:"みょ",rya:"りゃ",ryu:"りゅ",ryo:"りょ",
+  gya:"ぎゃ",gyu:"ぎゅ",gyo:"ぎょ",ja:"じゃ",ju:"じゅ",jo:"じょ",jya:"じゃ",jyu:"じゅ",jyo:"じょ",
+  bya:"びゃ",byu:"びゅ",byo:"びょ",pya:"ぴゃ",pyu:"ぴゅ",pyo:"ぴょ",
+  fa:"ふぁ",fi:"ふぃ",fe:"ふぇ",fo:"ふぉ",thi:"てぃ",thu:"とぅ",dhi:"でぃ",dhu:"どぅ",
+  tsa:"つぁ",tsi:"つぃ",tse:"つぇ",tso:"つぉ",che:"ちぇ",she:"しぇ",je:"じぇ",
+  xa:"ぁ",xi:"ぃ",xu:"ぅ",xe:"ぇ",xo:"ぉ",la:"ぁ",li:"ぃ",lu:"ぅ",le:"ぇ",lo:"ぉ",xtsu:"っ",ltsu:"っ"
+});
+const ROMAJI_TTC_WORDS = Object.freeze({
+  gakuensai:"学園祭",gakusai:"学園祭",gakkou:"学校",gakka:"学科",kaijou:"会場",heya:"部屋",
+  geemu:"ゲーム",game:"ゲーム",fuudo:"フード",food:"フード",furoa:"フロア",floor:"フロア",
+  kafe:"カフェ",cafe:"カフェ",koohii:"コーヒー",kohi:"コーヒー",toire:"トイレ",
+  watashi:"わたし",wa:"は",o:"を",e:"へ",oshiete:"教えて",kudasai:"ください",
+  doko:"どこ",dokodesu:"どこです",desuka:"ですか",desu:"です",masuka:"ますか",masu:"ます",
+  arimasuka:"ありますか",arimasu:"あります",konnichiwa:"こんにちは",arigatou:"ありがとう",
+  onegaishimasu:"お願いします",tetsudatte:"手伝って",shiritai:"知りたい",chikaku:"近く",
+  nanji:"何時",itsu:"いつ",nani:"なに",nandesuka:"何ですか",ikikata:"行き方"
+});
+function romajiWordToJapanese(token) {
+  if (/^[A-Z]{2,}$/.test(token)) return token; // AI, TTC, etc.
+  const lower = token.toLowerCase();
+  if (ROMAJI_TTC_WORDS[lower]) return ROMAJI_TTC_WORDS[lower];
+  let result = "";
+  for (let i = 0; i < lower.length;) {
+    const c = lower[i];
+    if (!/[a-z]/.test(c)) { result += c; ++i; continue; }
+    if (i + 1 < lower.length && c === lower[i+1] && /[bcdfghjklmpqrstvwxyz]/.test(c) && c !== "n") {
+      result += "っ"; ++i; continue;
+    }
+    if (c === "n" && (i + 1 === lower.length || lower[i+1] === "'" || (!/[aiueoyn]/.test(lower[i+1])))) {
+      result += "ん"; i += lower[i+1] === "'" ? 2 : 1; continue;
+    }
+    if (c === "n" && lower[i+1] === "n") {
+      result += "ん";
+      i += /[aiueoy]/.test(lower[i+2] || "") ? 1 : 2;
+      continue;
+    }
+    let found = false;
+    for (const size of [4,3,2,1]) {
+      const key = lower.slice(i,i+size);
+      if (ROMAJI_KANA[key]) { result += ROMAJI_KANA[key]; i+=size; found=true; break; }
+    }
+    if (!found) return token; // Unknown English/technical word: preserve it.
+  }
+  return result;
+}
+function prepareTypedQuestion(text) {
+  const original = String(text || "").trim();
+  // No changes to native Japanese IME, English, Bengali, or other languages.
+  if (!isJapaneseRomaji(original)) return original;
+  return original.replace(/[A-Za-z]+(?:'[A-Za-z]+)?/g, token => romajiWordToJapanese(token))
+    .replace(/(?<=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])[ \t]+(?=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])/gu, "")
+    .replace(/,/g,"、").replace(/\./g,"。").replace(/\?/g,"？").replace(/!/g,"！");
 }
 
 function detectWrittenLanguage(text) {
@@ -280,7 +761,7 @@ function explainAIError(error) {
 
 // ---------- SEND MESSAGE ----------
 
-async function ask(question, spokenLanguage = "") {
+async function ask(question, spokenLanguage = "", schoolGuideAnswer = "") {
   question = String(question || "").trim();
 
   if (!question || pendingChat) return;
@@ -298,7 +779,10 @@ async function ask(question, spokenLanguage = "") {
   let result;
 
   try {
-    result = await getAIAnswer(question, languageHint);
+    const floorReply = schoolGuideAnswer || window.answerTtcFloorGuide?.(question, languageHint);
+    result = floorReply
+      ? { text: floorReply, fallback: false }
+      : await getAIAnswer(question, languageHint);
 
   } catch (error) {
     console.error("Gemini AI Error:", error);
@@ -329,6 +813,7 @@ async function ask(question, spokenLanguage = "") {
   }
 
   pendingChat = false;
+  // The information menu owns navigation; nothing is appended below chat.
 }
 
 // ---------- CHAT FORM ----------
@@ -336,7 +821,7 @@ async function ask(question, spokenLanguage = "") {
 document.getElementById("form").addEventListener("submit", event => {
   event.preventDefault();
 
-  const question = input.value.trim();
+  const question = prepareTypedQuestion(input.value);
 
   if (!question || pendingChat) return;
 
@@ -348,7 +833,10 @@ document.getElementById("form").addEventListener("submit", event => {
 
 document.querySelectorAll("[data-q]").forEach(button => {
   button.addEventListener("click", () => {
-    ask(button.dataset.q);
+    closeInfoMenu();
+    const question = button.dataset.q;
+    const schoolAnswer = window.getTtcFestivalMenuAnswer?.(question) || "";
+    ask(question, schoolAnswer ? "ja-JP" : "", schoolAnswer);
   });
 });
 
@@ -756,7 +1244,7 @@ async function startRecording() {
   }
   recordingBusy = true;
   try {
-    window.speechSynthesis?.cancel();
+    stopReplySpeech();
     voiceMessage("🎙️ マイクの許可を求めています…");
     recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
     if (japaneseFastSucceeded) { stopMicrophoneTracks(); recordingBusy = false; return; }
@@ -865,7 +1353,7 @@ function startJapaneseOnlyVoice() {
   }
   const session = ++japaneseVoiceSession;
   try {
-    window.speechSynthesis?.cancel();
+    stopReplySpeech();
     const r = new BrowserSpeechRecognition();
     recognition = r;
     japaneseOnlyTranscript = "";
@@ -949,8 +1437,8 @@ if (micButton) {
 // Prefer a consistent voice on this device for every Japanese response.
 // A browser/device may have different installed voices; this is not a
 // cross-device identical-voice guarantee.
-const JAPANESE_VOICE_RATE = 0.88; // Natural, slightly slower Japanese chat replies
-const WELCOME_VOICE_RATE = 0.84; // Gentle welcome narration
+const JAPANESE_VOICE_RATE = 1.08; // Slightly quicker Japanese chat replies, without artificial per-sentence delays
+const WELCOME_VOICE_RATE = 0.98; // Same natural pace for home narration
 const JAPANESE_VOICE_PITCH = 1;
 let pinnedJapaneseVoice = null;
 
@@ -1000,57 +1488,139 @@ function pickReplyVoice(voices, locale) {
   })[0];
 }
 
+// The browser's Japanese voice handles punctuation as prosody inside ONE
+// utterance. Do not manually stop after every comma or sentence: doing so
+// caused an unnatural start/stop effect on phones and desktops.
+// Decorative characters and Markdown are removed, while 、。！？ act only as
+// phrasing hints for speech synthesis (they are not spoken as words).
+function speechInputText(value) {
+  return String(value || "")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/gi, "$1")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?=\D|$)/g, "$1年$2月$3日")
+    .replace(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/g, "$1月$2日")
+    .replace(/(\d{1,2})[:：](\d{2})(?=\D|$)/g, "$1時$2分")
+    .replace(/(\d{1,2})F\b/gi, "$1階")
+    .replace(/[\u200c\u200d\ufe0e\ufe0f]/gu, " ");
+}
+// Plain words-only helper stays available for diagnostics and fallback.
+function textForSpeech(value) {
+  return speechInputText(value)
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
+    .replace(/\s+/gu, " ").trim();
+}
+// A single long utterance naturally respects 、 and 。 without artificial
+// setTimeout() delays. Very long replies are split only for device safety.
+function naturalSpeechText(value) {
+  const input = speechInputText(value)
+    .replace(/(?<=[=*_{}|\\])[!?！？](?=[=*_{}|\\])/gu, "");
+  const japanese = /[\u3040-\u30ff\u3400-\u9fff]/u.test(input);
+  let text = input
+    .replace(/(\d+)[.．](\d+)/gu, (_, a, b) => japanese ? `${a}点${b}` : `${a} point ${b}`)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\n]+/g, japanese ? "、 " : ", ")
+    .replace(/[;；:：]/gu, japanese ? "、" : ",")
+    .replace(/[，,]/gu, japanese ? "、" : ",")
+    .replace(/([。！？])\s*、/gu, "$1 ") // Avoid a second pause after an already finished Japanese sentence
+    .replace(/[．.]/gu, japanese ? "。" : ".")
+    .replace(/[!！]/gu, japanese ? "！" : "!")
+    .replace(/[?？]/gu, japanese ? "？" : "?")
+    .replace(/[^\p{L}\p{M}\p{N}\s、。！？,.!?]/gu, " ")
+    .replace(/\s+([、。！？,.!?])/gu, "$1")
+    .replace(/([、。！？,.!?])\1{1,}/gu, "$1")
+    .replace(/\s+/gu, " ")
+    .trim();
+  // Avoid silent fragments that consist of separators alone.
+  if (!/[\p{L}\p{N}]/u.test(text)) text = "";
+  return text;
+}
+function speechSegments(value) {
+  const text = naturalSpeechText(value);
+  if (!text) return [];
+  const MAX_SPEECH_CHARS = 245;
+  const pieces = text.match(/[^。！？.!?]+[。！？.!?]*\s*/gu) || [text];
+  const chunks = [];
+  let current = "";
+  function push() {
+    if (current.trim()) chunks.push({text:current.trim(), pause:0});
+    current = "";
+  }
+  for (const sentence of pieces) {
+    if (current && current.length + sentence.length > MAX_SPEECH_CHARS) push();
+    if (sentence.length <= MAX_SPEECH_CHARS) {
+      current += sentence;
+      continue;
+    }
+    // A rare oversized sentence: split at natural clause/space boundaries.
+    const clauses = sentence.match(/[^、,]+[、,]?\s*/gu) || [sentence];
+    for (const clause of clauses) {
+      if (current && current.length + clause.length > MAX_SPEECH_CHARS) push();
+      if (clause.length <= MAX_SPEECH_CHARS) { current += clause; continue; }
+      // Absolute fallback if a single token runs far beyond engine limits.
+      for (let i = 0; i < clause.length; i += MAX_SPEECH_CHARS) {
+        if (current) push();
+        current = clause.slice(i, i + MAX_SPEECH_CHARS);
+      }
+    }
+  }
+  push();
+  return chunks;
+}
+// Small session token prevents previous timed fragments resuming after mute,
+// microphone activation, screen changes, or another message.
+let replySpeechVersion = 0;
+function stopReplySpeech() {
+  replySpeechVersion++;
+  window.speechSynthesis?.cancel();
+}
 function speakAnswer(text, languageHint = "") {
   if (!soundEnabled || !("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+  stopReplySpeech();
+  const chunks = speechSegments(text);
+  if (!chunks.length) return;
   const synth = window.speechSynthesis;
-  synth.cancel();
-
-  const cleanText = String(text || "")
-    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/[🎉🍜🎮🎤🗺️🕒😊]/gu, "")
-    .replace(/[*#`_]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleanText) return;
-
-  const utterance = new SpeechSynthesisUtterance(cleanText);
-  const written = detectWrittenLanguage(cleanText);
-  // Honor question language, especially Japanese Romaji -> Japanese reply.
-  // Only correct clearly incompatible scripts for the voice output.
+  const textOnly = chunks.map(c => c.text).join(" ");
+  const written = detectWrittenLanguage(textOnly);
   let locale = languageHint || written || "en-US";
-  if (/[\u0980-\u09ff]/u.test(cleanText) && !locale.startsWith("bn")) locale = "bn-BD";
-  else if (/[\u1000-\u109f]/u.test(cleanText)) locale = "my-MM";
-  else if (/[\u1100-\u11ff\uac00-\ud7af]/u.test(cleanText)) locale = "ko-KR";
-  else if (/[\u0900-\u097f]/u.test(cleanText) && !/^(hi|ne|mr)/i.test(locale)) locale = "hi-IN";
-  else if (/[\u3040-\u30ff]/u.test(cleanText)) locale = "ja-JP";
-  utterance.lang = locale;
-
+  if (/[\u0980-\u09ff]/u.test(textOnly) && !locale.startsWith("bn")) locale = "bn-BD";
+  else if (/[\u1000-\u109f]/u.test(textOnly)) locale = "my-MM";
+  else if (/[\u1100-\u11ff\uac00-\ud7af]/u.test(textOnly)) locale = "ko-KR";
+  else if (/[\u0900-\u097f]/u.test(textOnly) && !/^(hi|ne|mr)/i.test(locale)) locale = "hi-IN";
+  else if (/[\u3040-\u30ff]/u.test(textOnly)) locale = "ja-JP";
   const isJapanese = locale.toLowerCase().startsWith("ja");
-  // Pronunciation-only replacements: keep visible school text in normal kanji.
-  // Browsers sometimes read 学園祭 with a different on-device voice reading.
-  if (isJapanese) {
-    utterance.text = cleanText
-      .replace(/学園祭\s*(?:AI|ＡＩ)/gi, "がくえんさい、エーアイ")
-      .replace(/学園祭/g, "がくえんさい");
-  }
-  utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 0.94;
-  utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1.0;
-  utterance.volume = 1;
-
   const voices = synth.getVoices();
   const voice = isJapanese ? getPinnedJapaneseVoice() : pickReplyVoice(voices, locale);
-  if (voice) utterance.voice = voice;
-
-  // Never use an unrelated language voice; it produces confusing pronunciation.
   if (!voice && voices.length) {
     console.warn("No matching reply voice installed for", locale);
     voiceMessage("🔇 この端末には回答言語の音声がありません。端末の音声を追加してください。");
     return;
   }
-  // Some browsers populate the voice list asynchronously. Use the normal
-  // locale-based browser voice immediately rather than slowing down replies.
-  synth.speak(utterance);
+  const session = replySpeechVersion;
+  let index = 0;
+  function next() {
+    if (session !== replySpeechVersion || !soundEnabled || index >= chunks.length) return;
+    const chunk = chunks[index++];
+    const phrase = isJapanese ? chunk.text
+      .replace(/学園祭\s*(?:AI|ＡＩ)/gi, "がくえんさい エーアイ")
+      .replace(/学園祭/g, "がくえんさい") : chunk.text;
+    const utterance = new SpeechSynthesisUtterance(phrase);
+    utterance.lang = locale;
+    utterance.rate = isJapanese ? JAPANESE_VOICE_RATE : 0.96;
+    utterance.pitch = isJapanese ? JAPANESE_VOICE_PITCH : 1.0;
+    utterance.volume = 1;
+    if (voice) utterance.voice = voice;
+    utterance.onend = () => {
+      if (session !== replySpeechVersion) return;
+      next(); // No extra pause; synthesis already respects punctuation.
+    };
+    utterance.onerror = (event) => {
+      if (session !== replySpeechVersion) return;
+      if (event.error !== "interrupted" && event.error !== "canceled") console.info("[Voice] Reply TTS:", event.error);
+    };
+    synth.speak(utterance);
+  }
+  next();
 }
 
 // ---------- SOUND TOGGLE ----------
@@ -1076,7 +1646,7 @@ if (!("speechSynthesis" in window)) {
     soundEnabled = !soundEnabled;
 
     if (!soundEnabled) {
-      window.speechSynthesis.cancel();
+      stopReplySpeech();
     }
 
     soundButton.textContent =
@@ -1120,11 +1690,10 @@ if (welcomeRobot) {
 const welcomeVoiceHint = document.getElementById("welcomeVoiceHint");
 console.info("[TTC Voice Version] welcome-autoplay-gesture-v4");
 const WELCOME_SPEECH = "こんにちは！　東京テクニカルカレッジのがくえんさいへようこそ！　" +
-  "私は、がくえんさい、エーアイです。　皆さんをサポートするチャットボットです！　" +
-  "がくえんさいのイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを何でも聞いてください！" +
-  "学校や学科についての質問にもお答えします。" +
-  "マイクは日本語の音声入力に対応しています。文字入力ではローマ字や、さまざまな言語でも質問できます。" +
-  "さあ、一緒にがくえんさいを楽しみましょう！";
+  "私は、がくえんさいエーアイです。　スマートフォンでもパソコンでも使えます。　" +
+  "ゲーム、フード、展示、教室やフロアの場所をチャットでご案内します。　" +
+  "文字やマイクで質問でき、ローマ字入力と音声での回答にも対応しています。　" +
+  "チャットを始めるボタンから、どうぞ！";
 
 const WELCOME_SPEECH_REPEAT = WELCOME_SPEECH.replace(/^こんにちは！/, "");
 let welcomeCompletedCycles = 0;
@@ -1133,6 +1702,7 @@ let welcomeMuted = false;
 let welcomeUtterance = null;
 let welcomeRepeatTimer = null;
 let welcomeStartTimer = null;
+let welcomeSpeechSession = 0;
 let welcomeUnlocked = false;
 let welcomePendingGesture = false;
 let welcomeStarted = false;
@@ -1162,6 +1732,7 @@ function requestWelcomeGesture(message = "🔊 音声ガイドを聞くには画
   updateWelcomeButton();
 }
 function stopWelcomeSpeech() {
+  welcomeSpeechSession++;
   clearTimeout(welcomeRepeatTimer);
   clearTimeout(welcomeStartTimer);
   welcomeRepeatTimer = null;
@@ -1184,56 +1755,68 @@ function playWelcomeSpeech(fromGesture = false) {
   updateWelcomeButton();
 
   const synth = window.speechSynthesis;
-  const utterance = new SpeechSynthesisUtterance(welcomeCompletedCycles ? WELCOME_SPEECH_REPEAT : WELCOME_SPEECH);
-  welcomeUtterance = utterance;
-  utterance.lang = "ja-JP";
-  utterance.rate = WELCOME_VOICE_RATE;
-  utterance.pitch = JAPANESE_VOICE_PITCH;
-  utterance.volume = 1;
+  const sections = speechSegments(welcomeCompletedCycles ? WELCOME_SPEECH_REPEAT : WELCOME_SPEECH);
+  if (!sections.length) return;
+  const session = welcomeSpeechSession;
   const jaVoice = getPinnedJapaneseVoice();
-  if (jaVoice) utterance.voice = jaVoice;
-  // Robot remains upright: no bow animation.
-  utterance.onstart = () => {
-    if (welcomeUtterance !== utterance) return;
-    welcomeStarted = true;
-    welcomeRobot?.classList.add("is-speaking");
-    welcomePendingGesture = false;
-    clearTimeout(welcomeStartTimer);
-    welcomeStatus("音声ガイドを再生しています。🔊");
-    updateWelcomeButton();
-  };
-  utterance.onend = () => {
-    if (welcomeUtterance !== utterance) return;
-    welcomeUtterance = null;
-    welcomeStarted = false;
-    welcomeRobot?.classList.remove("is-speaking");
-    welcomeCompletedCycles += 1;
-    repeatWelcome();
-  };
-  utterance.onerror = (event) => {
-    if (welcomeUtterance !== utterance) return;
-    clearTimeout(welcomeStartTimer);
-    welcomeUtterance = null;
-    welcomeStarted = false;
-    welcomeRobot?.classList.remove("is-speaking");
-    if (event.error === "interrupted" || event.error === "canceled") return;
-    // "not-allowed" is a legitimate autoplay restriction, not a worker failure.
-    console.info("[TTC Welcome Voice] Speech unavailable:", event.error);
-    requestWelcomeGesture();
-  };
-  try {
-    if (synth.paused) synth.resume();
-    // Calling speak directly in a trusted user handler is important on Safari.
-    synth.speak(utterance);
-    // Some browsers silently refuse to start rather than firing onerror.
-    welcomeStartTimer = setTimeout(() => {
-      if (welcomeUtterance === utterance && !welcomeStarted) requestWelcomeGesture();
-    }, fromGesture ? 2300 : 1400);
-  } catch (error) {
-    if (welcomeUtterance !== utterance) return;
-    welcomeUtterance = null;
-    requestWelcomeGesture();
+  let index = 0;
+  function playNextSection() {
+    if (session !== welcomeSpeechSession || !isWelcomeVisible() || welcomeMuted) return;
+    if (index >= sections.length) {
+      welcomeUtterance = null;
+      welcomeStarted = false;
+      welcomeRobot?.classList.remove("is-speaking");
+      welcomeCompletedCycles += 1;
+      repeatWelcome();
+      return;
+    }
+    const chunk = sections[index++];
+    const utterance = new SpeechSynthesisUtterance(chunk.text);
+    welcomeUtterance = utterance;
+    utterance.lang = "ja-JP";
+    utterance.rate = WELCOME_VOICE_RATE;
+    utterance.pitch = JAPANESE_VOICE_PITCH;
+    utterance.volume = 1;
+    if (jaVoice) utterance.voice = jaVoice;
+    utterance.onstart = () => {
+      if (session !== welcomeSpeechSession || welcomeUtterance !== utterance) return;
+      welcomeStarted = true;
+      welcomeRobot?.classList.add("is-speaking");
+      welcomePendingGesture = false;
+      clearTimeout(welcomeStartTimer);
+      welcomeStatus("音声ガイドを再生しています。🔊");
+      updateWelcomeButton();
+    };
+    utterance.onend = () => {
+      if (session !== welcomeSpeechSession || welcomeUtterance !== utterance) return;
+      playNextSection(); // Continue without an additional artificial gap.
+    };
+    utterance.onerror = (event) => {
+      if (session !== welcomeSpeechSession || welcomeUtterance !== utterance) return;
+      clearTimeout(welcomeStartTimer);
+      if (event.error === "interrupted" || event.error === "canceled") return;
+      welcomeUtterance = null;
+      welcomeStarted = false;
+      welcomeRobot?.classList.remove("is-speaking");
+      console.info("[TTC Welcome Voice] Speech unavailable:", event.error);
+      requestWelcomeGesture();
+    };
+    try {
+      if (synth.paused) synth.resume();
+      synth.speak(utterance);
+      // Autoplay can be blocked: allow first-tap fallback on Safari.
+      if (index === 1) {
+        welcomeStartTimer = setTimeout(() => {
+          if (session === welcomeSpeechSession && welcomeUtterance === utterance && !welcomeStarted) requestWelcomeGesture();
+        }, fromGesture ? 2300 : 1400);
+      }
+    } catch (error) {
+      if (session !== welcomeSpeechSession) return;
+      welcomeUtterance = null;
+      requestWelcomeGesture();
+    }
   }
+  playNextSection();
 }
 function activateWelcomeFromGesture(event) {
   if (!canSpeakWelcome || welcomeMuted || !isWelcomeVisible() || welcomeStarted) return;
@@ -1289,3 +1872,5 @@ if (welcomeVoiceButton) {
     });
   }
 }
+
+window.TTC_JAPANESE_TEXT_UTILS = Object.freeze({prepareTypedQuestion, textForSpeech, speechSegments, cleanVisibleChatText});

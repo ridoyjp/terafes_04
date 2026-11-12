@@ -1,0 +1,27 @@
+'use strict';
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const src = fs.readFileSync(__dirname + '/../script.js', 'utf8');
+const start = src.indexOf('function speechInputText(value) {');
+const end = src.indexOf('// Small session token prevents previous timed fragments', start);
+assert.ok(start >= 0 && end > start, 'voice utilities exist');
+const context = {}; vm.createContext(context);
+vm.runInContext(src.slice(start, end), context);
+const tests = [];
+function check(desc, f) {f(); tests.push(desc); console.log('PASS', desc);}
+check('Short Japanese paragraph is one utterance', () => assert.equal(context.speechSegments('こんにちは！ゲームは5F、501号室です。こちらへどうぞ。').length, 1));
+check('Multiple Japanese sentences stay connected', () => assert.equal(context.speechSegments('こんにちは。' .repeat(12)).length,1));
+check('Room and floor are spoken as Japanese', () => assert.ok(context.naturalSpeechText('5F、501号室です').includes('5階、501号室')));
+check('Markdown, braces, odd marks removed from speech', () => assert.equal(context.naturalSpeechText('こんにちは！ *** ゲームは5F、501号室です。 =!|_{}'), 'こんにちは！ ゲームは5階、501号室です。'));
+check('Punctuation is prosody, not isolated speech units', () => assert.ok(context.speechSegments('こんにちは、ゲームはどこですか？').every(x => x.pause === 0)));
+check('Long text splits only when needed', () => assert.ok(context.speechSegments('ご案内いたします。'.repeat(45)).length >= 2));
+check('Long chunks stay within a safe size', () => assert.ok(context.speechSegments('ご案内いたします。'.repeat(45)).every(x=> x.text.length <= 245)));
+check('No JS timer between TTS chunks', () => {assert.ok(!src.includes('setTimeout(next, chunk.pause)')); assert.ok(!src.includes('setTimeout(playNextSection, chunk.pause)'));});
+check('Reply TTS uses same continuous phrase processor', () => assert.match(src, /const chunks = speechSegments\(text\)/));
+check('Welcome TTS uses same continuous phrase processor', () => assert.match(src, /const sections = speechSegments\(welcomeCompletedCycles/));
+check('Stop cancels pending sound', () => assert.match(src, /function stopReplySpeech\(\) \{[\s\S]*?speechSynthesis\?\.cancel/));
+check('Original Japanese Romaji typing remains', () => assert.match(src,/function prepareTypedQuestion\(/));
+const welcome = 'こんにちは！　東京テクニカルカレッジのがくえんさいへようこそ！　私は、がくえんさいエーアイです。　スマートフォンでもパソコンでも使えます。　ゲーム、フード、展示、教室やフロアの場所をチャットでご案内します。　文字やマイクで質問でき、ローマ字入力と音声での回答にも対応しています。　チャットを始めるボタンから、どうぞ！';
+check('Full welcome narration fits one single utterance',()=> assert.equal(context.speechSegments(welcome).length, 1));
+console.log('Smooth full-page voice checks', tests.length, '/', tests.length);

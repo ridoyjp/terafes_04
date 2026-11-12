@@ -1,5 +1,6 @@
 import { SCHOOL_DATA } from "./school-data.js";
 import { FESTIVAL_DATA } from "./festival-data.js";
+import { FLOOR_GUIDE, answerFloorGuide } from "./floor-guide-data.js";
 
 
 /*
@@ -27,7 +28,7 @@ const SYSTEM_TEXT = `
 - 事実が不明な場合は推測で断定しないでください。
 
 【学園祭の情報源ポリシー】
-学園祭2026については、システムに付与される【2026年 学園祭・先生承認データ】だけを最新の確定情報と見なしてください。
+学園祭2026については、【2026年 学園祭・先生承認データ】に加え、ユーザーが学校から提供された【2026年 フロアガイド掲載情報】の内容のみ参照できます。フロアガイドの提供はその他の日時・料金・設備情報の承認を意味しません。
 その情報にない開催日時、価格、教室番号、出店、出演者、トイレ場所等を作らないでください。
 「情報未確認」と伝え、学校の公式案内・担当スタッフに確認するよう案内してください。
 参考として2025年の行事について聞かれた時だけ、【2025年の参考実績】を使い、2026年と取り違えないでください。
@@ -78,12 +79,15 @@ function getApprovedFestivalContext(message) {
     Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
   const official2026 = approved
     ? JSON.stringify(FESTIVAL_DATA, null, 2).slice(0, 9000)
-    : "【2026年 学園祭・先生承認データ】未提供・未承認。2026年の詳細は確定情報として回答しない。";
+    : "【2026年 学園祭・先生承認データ】未提供・未承認。提供されたフロアガイドの掲載情報以外の日時・価格・設備情報を推測しない。";
   const historical = `【2025年の参考実績（2026年の予定ではありません）】
 2025年10月25日にTTC Festival 2025を実施。学校公式告知では学生企画の体験、作品展示、出店などを紹介しています。
 出典: https://tec.ttc.ac.jp/news/nid14607/（2025.10.01掲載）。
 2026年の出店や日時を2025年から推測してはいけません。`;
-  return official2026 + "\n\n" + historical;
+  const floorGuideText = `【2026年 フロアガイド掲載情報（学校提供Excelから転記）】\n` +
+    FLOOR_GUIDE.entries.map(e => `${e.floor}${e.room ? '/' + e.room.replace(/\n/g, '') : ''}: ${e.description.replace(/\n/g,' / ')}${e.department ? ' / ' + e.department.replace(/\n/g,'・') : ''}${e.schedule ? ' / 日時:' + e.schedule.replace(/\n/g,' / ') : ''}`).join('\n') +
+    '\n※シートに記載のない開催全体の時間・料金・トイレ・避難経路等は未確認。';
+  return official2026 + "\n\n" + floorGuideText + "\n\n" + historical;
 }
 
 function corsHeaders(origin) {
@@ -441,6 +445,11 @@ export default {
     };
     const romajiJapanese = isJapaneseRomaji(message);
     const effectiveResponseLanguage = romajiJapanese ? "ja-JP" : responseLanguage;
+    // 2026 floor/room/exhibit facts are sourced from the user's school XLSX.
+    // They do not imply approval of other dates, prices, safety locations or stalls.
+    const floorReply = answerFloorGuide(message, effectiveResponseLanguage ||
+      (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US"));
+    if (floorReply) return json({ reply: floorReply, informationStatus: "SCHOOL_FLOOR_GUIDE_2026" }, 200, headers);
     // When official 2026 data is missing, answer common exact festival-detail
     // questions deterministically instead of asking a model to guess dates,
     // prices, floor numbers or food menus. Also saves a Gemini request.
@@ -453,10 +462,10 @@ export default {
     if (!approved2026 && !refersTo2025 && ((isFestivalSpecific && seeksSpecifics) || isFestivalQuickTopic)) {
       const lang = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US");
       const reply = lang === "bn-BD"
-        ? "২০২৬ সালের TTC 学園祭-এর নির্দিষ্ট সময়, খাবারের স্টল, দাম ও কক্ষের তথ্য এখনও স্কুল থেকে অনুমোদিত নয়। অনুগ্রহ করে স্কুলের অফিসিয়াল ঘোষণা বা আয়োজক শিক্ষকের সঙ্গে নিশ্চিত করুন।"
+        ? "স্কুলের দেওয়া ২০২৬ ফ্লোর গাইডে প্রদর্শনী ও রুমের তথ্য আছে। তবে উৎসবের সামগ্রিক সময়, মূল্য ও অন্যান্য অনুল্লিখিত তথ্য নিশ্চিত করা যায়নি। অফিসিয়াল ঘোষণা বা স্টাফের সঙ্গে যাচাই করুন।"
         : lang === "en-US"
-          ? "The 2026 TTC Festival schedule, food stalls, prices and room details have not yet been confirmed by the school. Please check the school's official announcements or festival staff."
-          : "2026年の学園祭の開催日時、出店、価格、教室などの詳細は、現在学校から確認が取れていません。学校の公式案内または担当の先生にご確認ください。";
+          ? "The supplied 2026 floor guide lists exhibits and rooms, but overall festival opening hours, prices and other unlisted details remain unconfirmed. Please check official announcements or ask festival staff."
+          : "2026年のフロア別展示・教室情報は提供されたフロアガイドで確認できますが、開催全体の時間・料金など、シートにない詳細は未確認です。学校の公式案内または担当の先生にご確認ください。";
       return json({ reply, informationStatus: "UNVERIFIED_2026" }, 200, headers);
     }
     const inferredLanguage = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? 'bn-BD' : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? 'ja-JP' : 'en-US');

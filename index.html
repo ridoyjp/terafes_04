@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b2948">
-  <meta name="description" content="TTC 学園祭 2026 AI Chat Bot。フード、ゲーム、ステージ、会場案内について質問できる、音声対応のAIチャットガイドです。">
+  <meta name="description" content="TTC 学園祭 2026 AI Chat Bot。学校のExcelにあるフード、ゲーム、展示、会場案内について質問できる、音声対応のAIチャットガイドです。">
   <title>TTC 学園祭 2026 | AIチャットボット</title>
-  <link rel="stylesheet" href="style.css?v=20261022-robot-voice-bow-v2">
+  <link rel="stylesheet" href="style.css?v=20261112-conversational-v3">
   <link rel="stylesheet" href="hero-responsive.css?v=20261022-logo-up-v1">
   <link rel="stylesheet" href="robot-talk.css?v=20261022-round-v1">
   <link rel="stylesheet" href="robot-body-glow.css?v=20261022-round-v1">
@@ -63,9 +63,9 @@
     <button class="welcome-voice-btn" id="welcomeVoiceButton" type="button" aria-label="音声をミュート" aria-pressed="false" title="音声をミュート">🔊</button>
     <p class="welcome-voice-hint" id="welcomeVoiceHint" aria-live="polite">音声が始まらない場合は、画面を一度タップしてください。</p>
     <div class="intro-features" aria-label="おすすめ機能">
-      <button class="intro-feature" type="button" data-intro-question="おすすめは何ですか？">✦ おすすめ</button>
-      <button class="intro-feature" type="button" data-intro-question="食べ物はどこですか？">⌁ フード</button>
-      <button class="intro-feature" type="button" data-intro-question="イベントについて教えて">✧ イベント</button>
+      <button class="intro-feature" type="button" data-intro-question="ゲームはありますか？"><svg class="intro-button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 8h11a4 4 0 0 1 3.8 3l1.1 5.3a2.4 2.4 0 0 1-3.9 2.4l-2.4-2.1H8l-2.4 2.1a2.4 2.4 0 0 1-3.9-2.4L2.8 11a4 4 0 0 1 3.7-3Z"/><path d="M7 11v4m-2-2h4"/><circle cx="16.5" cy="11.5" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="14" r=".8" fill="currentColor" stroke="none"/></svg> ゲーム</button>
+      <button class="intro-feature" type="button" data-intro-question="食べ物はどこですか？"><svg class="intro-button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h14v5a7 7 0 0 1-14 0V8Z"/><path d="M18 9h2a2 2 0 0 1 0 4h-2"/><path d="M3 21h17"/><path d="M8 3v2m5-2v2"/></svg> フード</button>
+      <button class="intro-feature" type="button" data-intro-question="会場の場所を教えて"><svg class="intro-button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"/><path d="M9 3v15m6-12v15"/><circle cx="12" cy="11" r="2" fill="currentColor" stroke="none"/></svg> フロア案内</button>
     </div>
   </section>
 
@@ -79,12 +79,9 @@
         </div>
         <div class="side-divider"></div>
         <div class="side-label">カテゴリーから探す</div>
-        <button data-q="おすすめ" type="button">✨ <span>おすすめ</span><b aria-hidden="true">↗</b></button>
         <button data-q="食べ物" type="button">🍜 <span>フード &amp; ドリンク</span><b aria-hidden="true">↗</b></button>
         <button data-q="ゲーム" type="button">🎮 <span>ゲーム &amp; 体験</span><b aria-hidden="true">↗</b></button>
-        <button data-q="ステージ" type="button">🎤 <span>ステージ</span><b aria-hidden="true">↗</b></button>
         <button data-q="場所" type="button">🗺️ <span>会場ガイド</span><b aria-hidden="true">↗</b></button>
-        <button data-q="時間" type="button">🕒 <span>開催時間</span><b aria-hidden="true">↗</b></button>
         <div class="side-bottom"><span class="live-dot" aria-hidden="true"></span><div><strong>AIに質問できます</strong><small>学園祭のご案内はこちら</small></div></div>
       </aside>
 
@@ -100,39 +97,42 @@
 
       <nav class="topics" aria-label="質問カテゴリー">
         <button aria-controls="infoList" aria-expanded="false" id="infoToggle" type="button">📋 情報一覧</button>
-        <button data-q="おすすめは何ですか？" type="button">✨ おすすめ</button>
-        <button data-q="食べ物はどこですか？" type="button">🍜 フード</button>
-        <button data-q="ゲームはありますか？" type="button">🎮 ゲーム</button>
-        <button data-q="ステージについて教えて" type="button">🎤 ステージ</button>
-        <button data-q="会場の場所を教えて" type="button">🗺️ 会場案内</button>
+        <button type="button" class="festival-quick-link" data-quick-nav="food">🍜 フード</button>
+        <button type="button" class="festival-quick-link" data-quick-nav="games">🎮 ゲーム・体験</button>
+        <button type="button" class="festival-quick-link" data-quick-nav="ai">🤖 AI・展示</button>
+        <button type="button" class="festival-quick-link" data-quick-nav="floors">🗺️ 会場案内</button>
       </nav>
 
-      <div class="info-list" hidden id="infoList">
-        <div class="info-title">🎪 学園祭インフォメーション <button aria-label="閉じる" id="infoClose" type="button">✕</button></div>
-        <p>知りたい項目を選んでください。</p>
-        <div class="info-grid">
-          <button data-q="おすすめは何ですか？" type="button">✨ おすすめスポット</button>
-          <button data-q="食べ物はどこですか？" type="button">🍜 食べ物・ドリンク</button>
-          <button data-q="ゲームはありますか？" type="button">🎮 ゲーム・体験</button>
-          <button data-q="ステージについて教えて" type="button">🎤 ステージ</button>
-          <button data-q="会場の場所を教えて" type="button">🗺️ 会場案内</button>
-          <button data-q="開催時間を教えて" type="button">🕒 開催時間</button>
-          <button data-q="トイレはどこですか？" type="button">🚻 トイレ・休憩</button>
+      <div class="info-list festival-simple-menu" hidden id="infoList">
+        <div class="info-title">学園祭インフォメーション
+          <button aria-label="メニューを閉じる" id="infoClose" type="button">✕</button>
         </div>
-        <small>※ 2026年の日時・出店・会場情報は学校の確認が必要です。<a href="https://tec.ttc.ac.jp/news/" target="_blank" rel="noopener noreferrer">公式のお知らせ</a>もご確認ください。</small>
+        <p class="festival-menu-lead">知りたいことを選んでください。チャットで場所を案内します。</p>
+        <div class="festival-main-grid" id="festivalMainOptions" role="group" aria-label="学園祭案内メニュー">
+          <button type="button" data-festival-nav="games"><span class="festival-main-icon">🎮</span><span>ゲーム・体験<small>遊びと体験を探す</small></span></button>
+          <button type="button" data-festival-nav="food"><span class="festival-main-icon">☕</span><span>フード・カフェ<small>飲み物とお菓子</small></span></button>
+          <button type="button" data-festival-nav="ai"><span class="festival-main-icon">🤖</span><span>AI・展示<small>作品と技術を知る</small></span></button>
+          <button type="button" data-festival-nav="floors"><span class="festival-main-icon">🏢</span><span>フロア・部屋<small>場所から探す</small></span></button>
+          <button type="button" data-festival-nav="all"><span class="festival-main-icon">📚</span><span>すべての企画<small>学校の掲載内容を確認</small></span></button>
+        </div>
+      <section class="festival-smart-suggestions" id="festivalSmartSuggestions" aria-label="次に調べること">
+        <div class="festival-smart-top">
+          <span id="festivalSuggestionTitle">何を調べますか？</span>
+          <span id="festivalSuggestionCounter" aria-live="polite"></span>
+        </div>
+        <div class="festival-smart-choices" id="festivalSuggestionChoices" role="group" aria-label="チャットのおすすめ質問"></div>
+        <div class="festival-smart-controls" id="festivalSuggestionControls"></div>
+      </section>
+
+        <p class="festival-official-note">学校提供のフロアガイドを参照しています。部屋の記載がない企画は推測しません。</p>
       </div>
 
       <div class="messages" id="messages" role="log" aria-label="チャット履歴" aria-live="polite" aria-relevant="additions">
         <div class="row">
           <span class="avatar bot-icon"><img alt="Chatbot" src="assets/robot-logo.png"></span>
-          <div class="bubble">こんにちは！🎉
-東京テクニカルカレッジの学園祭へようこそ！
-私は、皆さんの学園祭をサポートするAIチャットボットです！🤖✨
-🎪 学園祭のイベントや出し物、会場案内、フード、ゲーム、ステージなど、気になることを聞いてください！
-🏫 学校や学科についての質問にもお答えします。
-🎙️ 日本語の音声入力に対応しています。文字ではローマ字やさまざまな言語でも質問できます。🌏
-※ イベントの最新日時や会場などは、学校の公式案内もご確認ください。
-さあ、一緒に学園祭を楽しみましょう！🎊</div>
+          <div class="bubble">こんにちは TTC FESTIVAL 2026へようこそ
+ゲーム フード AI展示 会場案内は情報一覧から探せます
+文字でもマイクでもお気軽に質問してください</div>
         </div>
       </div>
       <form class="composer" id="form">
@@ -146,6 +146,7 @@
     </div>
   </main>
   <script src="config.js?v=20261022-jp-ux1"></script>
-  <script src="script.js?v=20261022-hd-natural-v2"></script>
+  <script src="festival-floor-guide.js?v=20261109"></script>
+  <script src="script.js?v=20261112-faster-chat-natural-v4"></script>
 </body>
 </html>
