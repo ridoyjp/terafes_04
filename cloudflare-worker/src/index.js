@@ -329,9 +329,10 @@ export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin") || "";
 
-    const allowedOrigins = [
-      DEFAULT_ORIGIN,
-      ...String(env.EXTRA_ALLOWED_ORIGINS || "")
+   const allowedOrigins = [
+  DEFAULT_ORIGIN,
+  "https://terafes04.vercel.app",
+  ...String(env.EXTRA_ALLOWED_ORIGINS || "")
         .split(",")
         .map(x => x.trim())
         .filter(Boolean)
