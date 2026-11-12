@@ -257,7 +257,40 @@ const FLOOR_GUIDE = {
 };
 window.TTC_FLOOR_GUIDE = FLOOR_GUIDE;
 
+// Route only actual festival questions to the Excel floor guide.
+// Plain food/game/school/learning questions must remain free for Gemini.
+function shouldUseFestivalFloorGuide(question) {
+  const q = String(question || "").normalize("NFKC").toLowerCase().trim();
+  if (!q) return false;
+  const ttcName = /東京テクニカル|\bttc\b|tokyo\s+technical\s+college/i.test(q);
+  const festival = /学園祭|文化祭|学校祭|学祭|ttc\s*festival|gakuensai|gakusai|(?:この|学校の)フェスティバル|উৎসব|মেলা/i.test(q);
+  // Do not confuse a general festival, cuisine, history or technology question
+  // with the specific 2026 TTC event. Menu selections use their own exact data.
+  const genericQuestion = /学園祭とは|文化祭とは|学園祭の意味|文化祭の意味|学校祭とは|祭りの歴史|世界の祭り|フェスティバルとは|東京の(?:祭り|フェスティバル)|大阪の(?:祭り|フェスティバル)|インドの(?:祭り|お祭り)|india|diwali|(?:music|film|food|science) festival|what\s+is\s+(?:a\s+)?(?:school\s+)?festival|history\s+of\s+festivals?|festivals?\s+(?:in|of|around)\s+|festival meaning|how\s+to\s+(?:organize|plan)\s+(?:a\s+)?festival|জাপানের উৎসব|উৎসব কী|মেলার ইতিহাস/i.test(q);
+  if (!ttcName && genericQuestion) return false;
+  if (festival) return true;
+  // A generic English 'festival' is not necessarily a question about TTC.
+  if (/festival|フェスティバル/i.test(q) && !ttcName && !/学園祭|文化祭|学校祭/i.test(q)) return false;
+  // HTTP status codes and ordinary technology questions are not room numbers.
+  if (/\b(?:http|status|error|code|api)\s*(?:error|status|code)?\s*(?:501|505|401|407|404)\b|\b(?:501|505|401|407)\s*(?:error|status|code)\b/i.test(q)) return false;
+  // A precise location takes precedence over broad words like 'course'.
+  if (/(?:^|[^0-9])(1101|1103|1104|1001|901|903|904|701|501|505|507|401|405|407)(?:号室|\b)/i.test(q)) return true;
+  if (/(?:^|[^0-9a-z])(b1|11|10|9|7|6|5|4|1)\s*(?:f\b|階|かい|floor\b)/i.test(q)) return true;
+  // Generic Tokyo/Japan/world and course/teacher questions are NOT festival.
+  if (/東京|日本の|大阪|京都|北海道|海外|世界|tokyo|japan|osaka|kyoto|world|旅行|観光|レストラン|飲食店|料理|グルメ|food\s+in|restaurants?\s+in|ゲームの作り方|ゲーム開発|プログラミング|授業|カリキュラム|学費|奨学|就職|先生|教員|学校の歴史|入学方法|学科は|学科について|学科の|科について|科の|科では|科は|科の授業|何を学ぶ|学べる|subjects?|department|curriculum|course/i.test(q)) return false;
+  // These are explicit campus navigation or festival-information requests.
+  if (/フロア案内|会場案内|部屋ごと|企画一覧|全フロア|展示ブース|校内のブース|学校の展示|会場はどこ|教室はどこ|校内のどこ|キャンパス内|会場の場所|school\s*booth|festival\s*map/i.test(q)) return true;
+  const eventName = /3dプリンター体験|iotセンサー可視化体験|データサイエンス体験ブース|異文化交流ボドゲカフェ|学習成果展示|マイクラ|カプラ|ストロービルディング|風船プール|バルーンアート|模型体験コーナー|ヒンメリ作成|学生が作ったゲーム|ゲーム制作物の発表|ミニゆるメカトロ|パーソナルカラー診断|生成aiによる目押しゲーム|お菓子をget|スクリーンアトラクション|学生作品展示|何の動物|rjp活動報告|バスボム作り|カゼインプラスチック|カラメル作り体験|ステンドグラスクッキー|オリジナル小瓶|コーヒーコーナー|世界のお菓子コーナー|入学相談コーナー|エコステーション|建築系学科.*成果展示/i.test(q);
+  // Named event alone (e.g. clicked menu) or an event-location question.
+  if (eventName && !/とは|意味|作り方|方法|仕組み|テクノロジーとは/i.test(q) &&
+      (/(?:どこ|場所|何階|教室|何号室|在哪|কোথায়|where|location|教えて|案内|知りたい|ありますか|見たい|参加|体験|どんな)/i.test(q) || q.length < 25)) return true;
+  // Short, unambiguously on-site requests still work without 'festival'.
+  if (/^(?:ゲーム|フード|食べ物|コーヒー|お菓子|展示|体験)(?:は|の)?(?:どこ|何階|ありますか|どこですか)/i.test(q)) return true;
+  return false;
+}
+
 function answerFloorGuide(question, language = "ja-JP") {
+  if (!shouldUseFestivalFloorGuide(question)) return null;
   const original = String(question || "").trim();
   if (!original) return null;
   const q = original.normalize("NFKC").toLowerCase();
@@ -276,6 +309,10 @@ function answerFloorGuide(question, language = "ja-JP") {
     const floor = explicitFloor[1].toUpperCase() + 'F';
     selected = all.filter(e => e.floor === floor);
     requestType = `floor:${floor}`;
+  } else if (/ミニゆるメカトロ|rjp活動報告|バスボム作り|カゼインプラスチック|カラメル作り|ステンドグラスクッキー|オリジナル小瓶|ヒンメリ作成|学習成果展示|世界のお菓子コーナー|エコステーション/.test(q)) {
+    const event = /ミニゆるメカトロ|rjp活動報告|バスボム作り|カゼインプラスチック|カラメル作り|ステンドグラスクッキー|オリジナル小瓶|ヒンメリ作成|学習成果展示|世界のお菓子コーナー|エコステーション/.exec(q)[0];
+    selected = matchTopic(new RegExp(event, 'i'));
+    requestType = 'topic';
   } else if (/ステージについて|学園祭.*ステージ|festival.*stage/i.test(q)) {
     requestType = 'missing:stage';
   } else if (/トイレ|お手洗い|休憩所|避難|救護|toilet|restroom/i.test(q) &&

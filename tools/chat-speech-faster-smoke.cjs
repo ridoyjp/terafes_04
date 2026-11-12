@@ -1,6 +1,6 @@
 
 const fs=require('fs'), vm=require('vm'), assert=require('node:assert/strict');
-const source=fs.readFileSync(process.argv[2],'utf8');
+const source=fs.readFileSync(process.argv[2] || require('node:path').join(__dirname,'..','script.js'),'utf8');
 const a=source.indexOf('function speechInputText(value) {');
 const b=source.indexOf('// Small session token prevents previous timed fragments',a);
 const sandbox={};vm.createContext(sandbox);vm.runInContext(source.slice(a,b),sandbox);

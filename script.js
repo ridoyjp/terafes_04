@@ -145,7 +145,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
   if (activityCount) activityCount.textContent = `${activities.length}企画`;
 
   function roomName(entry) {
-    return entry.room ? `／${tidy(entry.room)}${/^[0-9\s\n]+$/.test(entry.room) ? "号室" : ""}` : "（部屋番号の記載なし）";
+    return entry.room ? `／${tidy(entry.room)}${/^[0-9\s\n]+$/.test(entry.room) ? "号室" : ""}` : "";
   }
   function parentDetails(entry) {
     const dept = entry.department ? `\n担当：${tidy(entry.department)}` : "";
@@ -165,7 +165,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
       // Show complete school-supplied description as well as the selected
       // activity, so no associated instructions/times are silently dropped.
       return `■ ${a.name}\n場所：${e.floor}${roomName(e)}${parentDetails(e)}\n学校資料の内容：${e.description}`;
-    }).join("\n\n") + "\n\n※ 部屋・日時が記載されていない場合は推測していません。";
+    }).join("\n\n");
   }
 
   function makeButton(parent, label, question, response, kind) {
@@ -175,7 +175,6 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
     btn.textContent = label;
     btn.setAttribute("aria-label", `${label}の場所と内容をチャットで確認`);
     btn.addEventListener("click", () => {
-      if (pendingChat) return;
       closeInfoMenu();
       ask(question, "ja-JP", response);
     });
@@ -213,7 +212,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
   // come from the uploaded school spreadsheet. 405/407 stay jointly listed.
   const roomDisplay = e => {
     const raw = String(e.room || "").trim();
-    if (!raw) return "部屋番号未記載";
+    if (!raw) return "";
     const rooms = raw.split(/\s+/u).filter(Boolean);
     if (rooms.length > 1 && rooms.every(r => /^\d+$/.test(r))) {
       return rooms.map(r => `${r}号室`).join("・") + "（一括掲載）";
@@ -221,7 +220,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
     if (/^\d+$/.test(raw)) return `${raw}号室`;
     return raw.replace(/\s+/gu, "");
   };
-  const conciseLocation = e => `${e.floor} ${roomDisplay(e)}`;
+  const conciseLocation = e => e.room ? `${e.floor} ${roomDisplay(e)}` : e.floor;
   const sectionIntro = (title, n) => `${title}は${n}件あります\n情報一覧のメニューから選ぶと場所と内容をご案内します`;
 
   let currentView = null;
@@ -242,7 +241,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
     button.type = "button";
     button.className = className;
     button.textContent = label;
-    button.addEventListener("click", () => { if (!pendingChat) onClick(); });
+    button.addEventListener("click", onClick);
     return button;
   }
   function renderSuggestions() {
@@ -282,7 +281,6 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
   // The top 情報一覧 button always returns to the original five choices.
   window.resetFestivalInfoMenu = showHome;
   function localChat(question, answerText) {
-    if (pendingChat) return;
     closeInfoMenu();
     // The school answer bypasses the AI API and cannot hallucinate a room.
     window.__ttcGuidedNavigation = true;
@@ -297,12 +295,11 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
       const dept = e.department ? `\n担当 ${tidy(e.department)}` : "";
       const when = e.schedule ? `\n開催日時 ${tidy(e.schedule)}` : "";
       const shared = /^405\s+407$/u.test(String(e.room || "").trim()) ? "\n学校の資料では405号室と407号室をまとめて掲載しています\n個別の部屋割りは記載されていません" : "";
-      const unknown = e.room ? "" : "\n部屋番号は学校資料に記載されていません";
       // A name-only answer can omit official details such as 1F café location,
       // exhibition contents, joint-room notes or 7F programme times.
       // Always include the entire, unchanged description from the XLSX row.
       const sourceDescription = `\n学校資料の記載内容\n${e.description}`;
-      const reply = `${activity.name}\n場所 ${place}${dept}${when}${sourceDescription}${shared}${unknown}`;
+      const reply = `${activity.name}\n場所 ${place}${dept}${when}${sourceDescription}${shared}`;
       localChat(`${activity.name}はどこですか`, reply);
     }
   });
@@ -311,8 +308,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
     view(`${label}  ${filtered.length}件`, filtered.map(activityChoice));
   }
   function entryAnswer(entry, title) {
-    const notes = entry.room ? "" : "\n部屋番号は学校資料に記載されていません";
-    return `${title}\n場所 ${conciseLocation(entry)}\n${entry.description}${parentDetails(entry)}${notes}`;
+    return `${title}\n場所 ${conciseLocation(entry)}\n${entry.description}${parentDetails(entry)}`;
   }
   function roomChoice(choice) {
     const e = choice.entry;
@@ -344,7 +340,6 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
   // Quick links reuse the same Excel-grounded information menu actions.
   document.querySelectorAll("[data-quick-nav]").forEach(button => {
     button.addEventListener("click", () => {
-      if (pendingChat) return;
       // Switching a quick category replaces the previously opened menu.
       resetInfoMenu();
       setInfo(true);
@@ -354,7 +349,6 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
   });
   mainOptions.querySelectorAll("[data-festival-nav]").forEach(button => {
     button.addEventListener("click", () => {
-      if (pendingChat) return;
       const index = ["games","food","ai","floors","all"].indexOf(button.dataset.festivalNav);
       if (index >= 0) menuItems[index].action();
     });
@@ -423,6 +417,7 @@ function openChat() {
 
 function closeChat() {
   // Back means leave the entire chat view, not just the conversation area.
+  cancelPendingAiReply();
   closeInfoMenu();
   japaneseOnlyListening = false;
   japaneseOnlyTranscript = "";
@@ -522,41 +517,9 @@ function add(text, user = false) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-// ---------- LOCAL FALLBACK ANSWERS ----------
-
-function answer(question) {
-  const q = question.toLowerCase();
-
-  if (/食|food|飲|屋台|グルメ|たべ/.test(q)) {
-    return "学校のフロアガイドには1Fのコーヒーコーナーと世界のお菓子コーナーが載っています。メニューや料金は記載されていません。";
-  }
-
-  if (/ゲーム|game|遊|体験/.test(q)) {
-    return "🎮 ゲームや体験型ブースを楽しめます！詳細は会場の案内をご確認ください。";
-  }
-
-  if (/ステージ|stage|音楽|ライブ|発表/.test(q)) {
-    return "🎤 ステージイベントや発表については公式スケジュールをご確認ください。";
-  }
-
-  if (/場所|どこ|地図|map|トイレ|休憩|guide/.test(q)) {
-    return "🗺️ 会場の案内掲示をご確認ください。スタッフにもお尋ねください！";
-  }
-
-  if (/時間|いつ|日程|開催/.test(q)) {
-    return "🕒 開催日時は学校からの公式案内をご確認ください。";
-  }
-
-  if (/おすすめ|recommend/.test(q)) {
-    return "学校のフロアガイドに載っている展示や体験は情報一覧から選べます。";
-  }
-
-  if (/こんにちは|hello|hi/.test(q)) {
-    return "こんにちは！😊 学園祭について何を知りたいですか？";
-  }
-
-  return "申し訳ありません。現在AIに接続できません。しばらくしてからもう一度お試しください。";
-}
+// ---------- API-INDEPENDENT FESTIVAL GUIDE ----------
+// Festival replies are read from the bundled, school-supplied spreadsheet data.
+// No fabricated content or guessed rooms when Gemini is unavailable.
 
 // ---------- GEMINI CONFIGURATION ----------
 
@@ -678,6 +641,36 @@ function detectWrittenLanguage(text) {
 }
 
 let pendingChat = false;
+let activeAIController = null;
+let activeChatToken = 0;
+let aiRetryAfter = 0;
+let aiPausedStatus = 0;
+
+// Navigation, particularly a verified XLSX entry, must never wait for Gemini.
+function cancelPendingAiReply() {
+  activeChatToken += 1;
+  if (activeAIController) activeAIController.abort();
+  activeAIController = null;
+  pendingChat = false;
+  document.querySelectorAll("#messages .bot-typing").forEach(node => node.remove());
+}
+
+function offlineAiExplanation(error, language) {
+  const quota = error?.status === 429;
+  const localFile = location.protocol === "file:";
+  if (language === "bn-BD") {
+    return (quota ? "AI-এর ব্যবহারসীমা শেষ হয়েছে। " : "AI এখন সংযুক্ত নেই। ") +
+      "তবে TTC Festival-এর ফ্লোর, রুম ও অনুষ্ঠানের তথ্য চালু আছে। 📋 情報一覧 থেকে বেছে নিন।";
+  }
+  if (language === "en-US") {
+    return (quota ? "The AI usage limit has been reached. " : "AI answers are temporarily unavailable. ") +
+      "The TTC Festival floor, room and event guide still works. Open 📋 情報一覧 to browse the verified school information.";
+  }
+  return (quota ? "AIの利用上限に達したため、一般質問には一時的に回答できません。" :
+    localFile ? "このローカルファイルからAIには接続できません。" : "現在AIに接続できません。") +
+    "\n学園祭のフロア、部屋、企画の情報は引き続き使えます。\n📋 情報一覧から選んでください。";
+}
+
 
 // ---------- TYPING INDICATOR ----------
 
@@ -709,11 +702,17 @@ function showTyping() {
 // ---------- GEMINI API REQUEST ----------
 
 async function getAIAnswer(question, languageHint = "") {
+  if (Date.now() < aiRetryAfter) {
+    const error = new Error("AI_COOLDOWN");
+    error.status = aiPausedStatus;
+    throw error;
+  }
   if (!CHAT_API_URL || CHAT_API_URL.includes("YOUR-WORKER")) {
     throw new Error("AI_API_NOT_CONFIGURED");
   }
 
   const controller = new AbortController();
+  activeAIController = controller;
   const chatStartedAt = performance.now();
   const timeout = setTimeout(() => controller.abort(), 45000);
   try {
@@ -733,87 +732,72 @@ async function getAIAnswer(question, languageHint = "") {
       console.error("AI Worker HTTP Error", response.status, data);
       const error = new Error(String(data.error || `HTTP ${response.status}`));
       error.status = response.status;
+      if (response.status === 429 || response.status === 503) {
+        // Avoid retry storms during quota exhaustion; local guide is unaffected.
+        aiPausedStatus = response.status;
+        aiRetryAfter = Date.now() + (response.status === 429 ? 300000 : 30000);
+      }
       throw error;
     }
     if (typeof data.reply !== "string" || !data.reply.trim()) {
       throw new Error("EMPTY_AI_REPLY");
     }
     console.info("[Voice timing] chat response:", Math.round(performance.now() - chatStartedAt), "ms");
+    aiRetryAfter = 0;
+    aiPausedStatus = 0;
     return { text: data.reply.trim().slice(0, 5000), fallback: false };
   } finally {
     clearTimeout(timeout);
+    if (activeAIController === controller) activeAIController = null;
   }
-}
-
-function explainAIError(error) {
-  if (location.protocol === "file:") {
-    return "⚠️ AIはローカルファイル(file://)から利用できません。公式サイト https://ridoyjp.github.io/terafes_04/ を開いてください。";
-  }
-  if (error?.name === "AbortError") return "⚠️ AIの応答がタイムアウトしました。少し待ってからもう一度お試しください。";
-  if (error?.status === 403) return "⚠️ サイトの接続元(Origin)が許可されていません。公式GitHub Pagesサイトをご利用ください。";
-  if (error?.status === 429) return "⚠️ AIの利用上限に達しました。少し時間をおいてお試しください。";
-  if (error?.status === 503) return "⚠️ AIが一時的に利用できません。少し待って再試行してください。管理者はWorkerログをご確認ください。";
-  if (error?.status === 502) return "⚠️ Geminiから回答を取得できませんでした。管理者はCloudflare WorkerログのGemini API Errorをご確認ください。";
-  if (error?.status === 504) return "⚠️ AIの応答が時間切れになりました。通信環境を確認し、しばらくしてからお試しください。";
-  if (error?.message === "AI_API_NOT_CONFIGURED") return "⚠️ AI APIのURLが設定されていません。config.jsを確認してください。";
-  return "⚠️ 現在AIサービスに接続できません。通信環境を確認してもう一度お試しください。";
 }
 
 // ---------- SEND MESSAGE ----------
 
 async function ask(question, spokenLanguage = "", schoolGuideAnswer = "") {
   question = String(question || "").trim();
+  if (!question) return;
 
-  if (!question || pendingChat) return;
-
-  pendingChat = true;
-  // For typed input, Gemini follows the actual message language.
-  // For spoken input, use the chosen recognition locale.
+  // Static Excel questions are resolved BEFORE considering the AI state.
+  // This also lets a visitor select an event during a slow Gemini request.
   const languageHint = spokenLanguage || detectWrittenLanguage(question) || requestedVoiceLanguage();
+  const localReply = schoolGuideAnswer || window.answerTtcFloorGuide?.(question, languageHint) || "";
+  if (pendingChat) {
+    if (!localReply) return; // Avoid duplicate AI requests.
+    cancelPendingAiReply();
+  }
+
+  const token = ++activeChatToken;
+  pendingChat = true;
   lastQuestionLanguage = languageHint;
-
   add(question, true);
-
   const typing = showTyping();
-
   let result;
-
   try {
-    const floorReply = schoolGuideAnswer || window.answerTtcFloorGuide?.(question, languageHint);
-    result = floorReply
-      ? { text: floorReply, fallback: false }
+    result = localReply
+      ? {text:localReply, fallback:false, local:true}
       : await getAIAnswer(question, languageHint);
-
   } catch (error) {
-    console.error("Gemini AI Error:", error);
-    result = { text: explainAIError(error), fallback: true };
+    if (token !== activeChatToken) return;
+    console.warn("AI unavailable; verified festival guide remains active:", error?.status || error?.name || "network");
+    result = {text:offlineAiExplanation(error, languageHint), fallback:true};
   } finally {
     typing.remove();
+    if (token === activeChatToken) pendingChat = false;
   }
-
+  // An older canceled request must never overwrite newer local answers.
+  if (token !== activeChatToken) return;
   add(result.text, false);
-
   if (!result.fallback) {
-    chatHistory.push(
-      {
-        role: "user",
-        text: question.slice(0, 4000)
-      },
-      {
-        role: "model",
-        text: result.text.slice(0, 5000)
-      }
-    );
-
-    if (chatHistory.length > 12) {
-      chatHistory.splice(0, chatHistory.length - 12);
+    // Local festival answers are deterministic. Keep them OUT of Gemini history,
+    // so a later unrelated question (e.g. Tokyo food) stays on its own topic.
+    if (!result.local) {
+      chatHistory.push({role:"user", text:question.slice(0, 4000)},
+        {role:"model", text:result.text.slice(0, 5000)});
+      if (chatHistory.length > 12) chatHistory.splice(0, chatHistory.length - 12);
     }
-
     speakAnswer(result.text, lastQuestionLanguage);
   }
-
-  pendingChat = false;
-  // The information menu owns navigation; nothing is appended below chat.
 }
 
 // ---------- CHAT FORM ----------

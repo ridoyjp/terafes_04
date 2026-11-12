@@ -28,3 +28,16 @@ node --test tests/*.test.mjs
 
 ## データの範囲
 学校 Excel は 9フロア、21掲載枠です。21掲載枠に含まれる複数の名称を分割して 34企画として表示しています。学校資料に記載のない部屋、料金、全体の開催時間などを推定して案内しません。
+
+## AI利用上限に達しても利用できる機能（2026-11-12最終版）
+
+Gemini APIが429/503を返す、または一時的に利用できない場合も、**学校提供のExcelから生成された `festival-floor-guide.js` はAPIに依存せず動作します**。情報一覧の企画ボタンや、指定された部屋・フロアの質問には学校掲載情報から案内します。一般知識のAI回答は利用できません。利用上限を隠してAI回答を捏造しない設計です。
+
+現在のQAコマンド（古いUI向けのテストも現行画面向けに更新済み）：
+
+```bash
+node tools/full-function-check.mjs
+node tests/api-exhaustion-offline-guide.test.mjs
+```
+
+検証結果は `QA/FINAL_OFFLINE_QA_REPORT_JP.md` と `QA/FINAL_OFFLINE_QA_REPORT_BN.md` を参照してください。初回のGitHub Pages読み込みにはインターネットが必要で、実機iOS Safariや本番APIの検証は別途行ってください。

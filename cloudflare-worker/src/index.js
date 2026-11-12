@@ -1,6 +1,7 @@
+import { getOfficialSchoolFacts } from "./official-school-facts.js";
 import { SCHOOL_DATA } from "./school-data.js";
 import { FESTIVAL_DATA } from "./festival-data.js";
-import { FLOOR_GUIDE, answerFloorGuide } from "./floor-guide-data.js";
+import { FLOOR_GUIDE, answerFloorGuide, shouldUseFestivalFloorGuide } from "./floor-guide-data.js";
 
 
 /*
@@ -18,6 +19,9 @@ const SYSTEM_TEXT = `
 
 【回答ルール】
 - 学校以外の幅広い質問にも答えてください（知識、学習、数学、コード、翻訳、日常の質問など）。
+- **最新の質問を最優先**：旅行、料理、歴史、科学、ニュース、プログラミング、一般的な学校制度などの質問は、通常の汎用アシスタントとして直接答えてください。TTCの情報を勝手に差し込まないでください。
+- TTC・学園祭の資料はその話題が明確な時だけ使い、関係のない話題には出さないでください。質問が曖昧な場合は短く確認してください。
+- インターネットのリアルタイム検索機能を持つとは主張しないでください。最新ニュース、値段、法律、天気などの更新情報は確認できない場合、古い可能性があると説明してください。
 - ユーザーの最新の質問で使われた言語と同じ言語で返答してください。日本語は日本語、বাংলা は বাংলা、English は English、ほかの言語も可能な範囲で対応してください。
 - 入力が音声認識経由で、明示的な responseLanguage が渡されている場合、その言語を優先してください。
 - 言語が不明なら質問の文脈または直近のやり取りに合わせてください。
@@ -30,6 +34,7 @@ const SYSTEM_TEXT = `
 【学園祭の情報源ポリシー】
 学園祭2026については、【2026年 学園祭・先生承認データ】に加え、ユーザーが学校から提供された【2026年 フロアガイド掲載情報】の内容のみ参照できます。フロアガイドの提供はその他の日時・料金・設備情報の承認を意味しません。
 その情報にない開催日時、価格、教室番号、出店、出演者、トイレ場所等を作らないでください。
+- フロアガイドに階だけ掲載され部屋番号が空欄の企画は、場所を「1F」など階のみで案内してください。部屋番号未記載などの断り書きを付けず、部屋番号を推測しないでください。
 「情報未確認」と伝え、学校の公式案内・担当スタッフに確認するよう案内してください。
 参考として2025年の行事について聞かれた時だけ、【2025年の参考実績】を使い、2026年と取り違えないでください。
 未確認の情報を肯定的に断言しないでください。
@@ -48,12 +53,22 @@ function isJapaneseRomaji(text) {
 }
 
 function getRelevantSchoolData(message, history) {
-  const query = [message, ...history.filter(x=>x?.role==='user').slice(-1).map(x=>x.text||'')].join(' ').toLowerCase();
-  const schoolWords = /ttc|kouchou|kocho|sensei|gakka|gakuen|gakusai|gakuensai|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|juusho|jyuusho|denwa|higashi nakano|tokyo technical|学校|専門|ttc|テクニカル|school|college|学園|入学|学費|留学生|奨学|就職|資格|オープンキャンパス|建築|インテリア|バイオ|情報処理|キャンパス|東中野|中野|住所|アクセス|施設|学科|学園祭|祭り|文化祭|ステージ|フード|屋台|ブース|会場|トイレ|স্কুল|কলেজ|উৎসব|ভর্তি|ফি|ক্যাম্পাস|school festival|festival|admission|tuition|course|department/i;
-  if (!schoolWords.test(query)) return '';
+  // Do not inherit the last school's keywords for a new unrelated question.
+  // Only deictic follow-ups may use the previous topic.
+  const followUp = /^(それ|その|そこ|それについて|もっと|詳しく|他には|その学科|その先生|and that|what about|আরও|এটা)/i.test(String(message).trim());
+  const lastUser = followUp ? history.filter(x=>x?.role==='user').slice(-1).map(x=>x.text||'').join(' ') : '';
+  const query = [message, lastUser].join(' ').toLowerCase();
+  // School knowledge is a context for *TTC questions*, not a blanket answer
+  // to general education/college/teacher questions from anywhere in the world.
+  const namedTtc = /東京テクニカル|専門学校東京|小山学園|\bttc\b|tokyo technical college|tokyo tekunikaru|東中野|情報処理科|建築監督科|(?:iot|データサイエンス)\s*\+\s*ai科|東京テクニカルカレッジ/i.test(query);
+  const thisSchool = /この学校|こちらの学校|本校|当校|貴校|この専門学校|学校の(?:学費|授業|歴史|先生|校長|入学|就職|カリキュラム|奨学金|住所)|校長先生|この学科|この学校の|this school|our school|your school|the ttc school|এই স্কুল|এই কলেজ|স্কুলের (?:ফি|শিক্ষক|ঠিকানা)|কলেজের (?:ফি|শিক্ষক|ঠিকানা)/i.test(query);
+  if (!namedTtc && !thisSchool) return '';
+  // Explicitly asking about another place or institution should not silently
+  // receive TTC's tuition, teachers or curriculum.
+  if (!namedTtc && /日本の学校制度|学校一般|一般的な学校|他の学校|他校|アメリカの学校|イギリスの学校|大学全般|school system|american school|universities in|universities of|college in (?:the )?(?:usa|us|uk|india)|other schools|বিশ্বের স্কুল/i.test(message)) return '';
   const scored = SCHOOL_DATA.entries.map(e=>({e,score:e.keywords.reduce((a,k)=>a+(query.includes(k.toLowerCase())? (k.length>2?3:1):0),0)}));
   scored.sort((a,b)=>b.score-a.score);
-  const selected = scored.filter(x=>x.score>0).slice(0,6).map(x=>x.e);
+  const selected = scored.filter(x=>x.score>0 && x.e.verified !== false).slice(0,6).map(x=>x.e);
   // General romanized school questions should still receive school overview.
   if (/\b(ttc|tokyo technical|tokyo tekunikaru)\b/i.test(query) && !selected.length) {
     const intro = SCHOOL_DATA.entries.find(e => e.topic === '概要・歴史');
@@ -66,15 +81,18 @@ function getRelevantSchoolData(message, history) {
       if(e && !selected.includes(e)) selected.push(e);
     }
   }
-  return '【学校確認資料（2026-10-19時点）】\n'+selected.slice(0,9).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source||'未提供（学園祭担当教員に確認）'}`).join('\n\n');
+  const officialFacts = getOfficialSchoolFacts(query);
+  return '【東京テクニカルカレッジ公式公開情報（2026-11-12確認。最新情報は公式ページで再確認）】\n' +
+    [officialFacts, ...selected.slice(0,5).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source || 'https://tec.ttc.ac.jp/'}`)].filter(Boolean).join('\n\n');
 }
 
 // Teacher-reviewed 2026 festival information. Draft records must NEVER be
 // presented to visitors as confirmed facts. Generated from the teacher JSON.
 function getApprovedFestivalContext(message) {
   const q = String(message || "").toLowerCase();
-  const festivalKeywords = /学園祭|文化祭|フェス|祭り|gakuensai|festival|matsuri|フード|屋台|ゲーム|ステージ|会場|トイレ|タイムテーブル|event|stage|food|game|map|fest|উৎসব|মেলা/i;
-  if (!festivalKeywords.test(q)) return "";
+  // Generic questions about food, games, travel or subjects must never
+  // receive the festival information context.
+  if (!shouldUseFestivalFloorGuide(message)) return "";
   const approved = FESTIVAL_DATA.status === "APPROVED" &&
     Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
   const official2026 = approved
@@ -87,7 +105,7 @@ function getApprovedFestivalContext(message) {
   const floorGuideText = `【2026年 フロアガイド掲載情報（学校提供Excelから転記）】\n` +
     FLOOR_GUIDE.entries.map(e => `${e.floor}${e.room ? '/' + e.room.replace(/\n/g, '') : ''}: ${e.description.replace(/\n/g,' / ')}${e.department ? ' / ' + e.department.replace(/\n/g,'・') : ''}${e.schedule ? ' / 日時:' + e.schedule.replace(/\n/g,' / ') : ''}`).join('\n') +
     '\n※シートに記載のない開催全体の時間・料金・トイレ・避難経路等は未確認。';
-  return official2026 + "\n\n" + floorGuideText + "\n\n" + historical;
+  return official2026 + "\n\n" + floorGuideText + (/2025|昨年|去年|previous year|last year|গত বছর/i.test(message) ? "\n\n" + historical : "");
 }
 
 function corsHeaders(origin) {
@@ -200,7 +218,7 @@ function safeFaq(message, language) {
 function publicSchoolQuestion(q) {
   // Cache only public, non-personal, single-turn school/festival inquiries.
   const text = String(q || '').trim();
-  const school = /TTC|東京テクニカル|学校|学園祭|文化祭|東中野|校舎|学科|学校祭|専門学校|festival|tokyo technical college|school website|college|স্কুল|কলেজ|উৎসব/i.test(text);
+  const school = /\bTTC\b|東京テクニカル|専門学校|学校|学園祭|文化祭|東中野|校舎|学科|学校祭|festival|tokyo technical college|college|স্কুল|কলেজ|উৎসব/i.test(text);
   const sensitive = /@|https?:|\d{5,}|パスワード|住所は|私の|個人|電話番号|メール|my |mine|আমার|password|email|address|account|secret|token/i.test(text);
   return !!school && !sensitive && text.length <= 140;
 }
@@ -456,8 +474,10 @@ export default {
     const approved2026 = FESTIVAL_DATA.status === "APPROVED" &&
       Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
     const refersTo2025 = /2025|昨年|去年|last year|previous year|গত বছর/i.test(message);
-    const isFestivalSpecific = /学園祭|文化祭|がくえんさい|gakuensai|gakusai|matsuri|学校祭|フェスティバル|school festival|ttc festival|উৎসব|মেলা|festival/i.test(message);
-    const isFestivalQuickTopic = /^(おすすめは何ですか|食べ物はどこですか|ゲームはありますか|ステージについて教えて|会場の場所を教えて|開催時間を教えて|トイレはどこですか)/.test(message);
+    // Only known TTC-specific prompts get the festival-only offline fallback.
+    // Generic festivals anywhere in the world are answered by Gemini.
+    const isFestivalSpecific = shouldUseFestivalFloorGuide(message);
+    const isFestivalQuickTopic = /^(食べ物はどこですか|ゲームはありますか|ステージについて教えて|会場の場所を教えて|開催時間を教えて|トイレはどこですか)$/.test(message.trim());
     const seeksSpecifics = /いつ|日時|日付|何時|時間|値段|料金|価格|いくら|どこ|場所|何階|教室|マップ|地図|予定|出店|屋台|食品|食べ物|フード|ゲーム|ステージ|会場|内容|スケジュール|タイムテーブル|おすすめ|トイレ|受付|日程|start|when|where|date|time|price|food|stall|map|game|stage|schedule|cost|location|event|কবে|কোথায়|দাম|সময়|খাবার/i.test(message);
     if (!approved2026 && !refersTo2025 && ((isFestivalSpecific && seeksSpecifics) || isFestivalQuickTopic)) {
       const lang = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US");
@@ -479,7 +499,7 @@ export default {
     const cacheable = history.length === 0 && publicSchoolQuestion(message);
     const cacheKeyData = { v: 1, model, message: message.normalize('NFKC').toLowerCase(), language: effectiveResponseLanguage,
       festivalVersion: FESTIVAL_DATA.last_verified || FESTIVAL_DATA.status,
-      schoolVersion: '2026-10-19' };
+      schoolVersion: '2026-11-12-official-2', routingVersion:'general-topics-v3' };
     const cached = cacheable ? await cacheRead(request, 'chat', cacheKeyData) : { cacheKey: null, data: null };
     if (cached.data?.reply) return json(cached.data, 200, headers);
     const sharedKey = cacheable ? await hashString('public-faq-v2:' + JSON.stringify(cacheKeyData)) : null;
@@ -510,6 +530,8 @@ Do not add another language unless the user explicitly requests translation or b
 If the user writes in Bengali, respond exclusively in natural Bengali script (বাংলা), not Japanese.
 If the user writes in English, respond exclusively in English, not Japanese.
 Your final answer should directly address the latest question; no unrelated festival promotion.
+IMPORTANT: Treat the latest user question as the main topic. If the user asks about Tokyo foods, restaurants, travel, math, software, science, another school, or any topic unrelated to Tokyo Technical College, answer that question normally. Never show the festival floor guide for a generic food/game question. General world knowledge is not restricted to this school; do not insert school URLs or facts when the question is unrelated. Distinguish current facts from facts that may be out of date.
+For TTC official facts, follow only the official sources provided below. If details (e.g. a particular teacher's name, full faculty roster, exact 2026 tuition/waiver eligibility, room number or placements) are not verified, say they are unverified and link to the appropriate official page. No claim that all students receive free tuition or guaranteed jobs. The included source pages are a 2026-11-12 snapshot, not live browsing.
 `;
 
     const contents = [];

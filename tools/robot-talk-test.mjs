@@ -12,8 +12,8 @@ assert.match(css,/welcome-robot-stage::before,[\s\S]*?display: none !important/,
 assert.match(css,/ttcHDBlink/,'Blink keyframes present');
 assert.match(css,/ttcHDTalk/,'Talk keyframes present');
 assert.match(css,/\.is-speaking \.robot-mouth/,'Talk depends on speaking');
-assert.match(js,/const WELCOME_VOICE_RATE = 0\.84/,'Slower welcome voice');
-assert.match(js,/const JAPANESE_VOICE_RATE = 0\.88/,'Slower reply voice');
+assert.match(js,/const WELCOME_VOICE_RATE = 0\.98/,'Current welcome voice');
+assert.match(js,/const JAPANESE_VOICE_RATE = 1\.08/,'Current reply voice');
 assert.match(js,/utterance\.onstart[\s\S]*?classList\.add\("is-speaking"\)/,'Speech start toggles mouth');
 assert.match(js,/utterance\.onend[\s\S]*?classList\.remove\("is-speaking"\)/,'Speech end toggles mouth');
 assert.ok(existsSync('assets/hero-robot-round-glow.png'),'HD asset exists');

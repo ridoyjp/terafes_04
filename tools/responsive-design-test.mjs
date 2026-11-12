@@ -26,7 +26,7 @@ for (const id of ['intro', 'introLogo', 'welcomeRobot', 'welcomeVoiceButton',
 }
 assert.equal((html.match(/data-intro-question=/g) || []).length, 3, 'Need 3 welcome shortcuts');
 assert.match(js, /\[data-intro-question\]/, 'Welcome shortcuts are not wired');
-assert.match(js, /openChat\(\);\s*if \(question\) ask\(question\)/, 'Welcome shortcut must open chat');
+assert.match(js, /openChat\(\);[\s\S]*?if \(question\) ask\(question,/, 'Welcome shortcut must open chat');
 assert.match(css, /@media \(max-width: 600px\)/, 'Phone layout missing');
 assert.match(css, /@media \(max-height: 720px\)/, 'Short-screen support missing');
 assert.match(css, /prefers-reduced-motion/, 'Reduced motion support missing');

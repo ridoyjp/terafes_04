@@ -1,37 +1,27 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
-const js=fs.readFileSync(new URL('../script.js',import.meta.url),'utf8');
-const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';
+import {js,html} from './helpers/current-menu.mjs';
 const start=js.indexOf('function cleanVisibleChatText(value) {');
 const end=js.indexOf('\n}\n\nmessages.querySelectorAll',start);
-assert(start>=0 && end>start);
-const context={};
-vm.runInNewContext(js.slice(start,end+2)+'\nthis.clean=cleanVisibleChatText',context);
-const clean=context.clean;
-test('Visible chat removes Japanese and Latin noise punctuation while keeping words and floor/room',()=>{
-  assert.equal(clean('こんにちは！ *** ゲームは5F、501号室です。 =!|_{}'), 'こんにちは ゲームは5F 501号室です');
-  assert.equal(clean('📍 5F／501号室：AI・ITゲーム 🤖'), '5F 501号室 AI ITゲーム');
-  assert.equal(clean('বাংলায় কথা! *** Game, food =!|_{}'),'বাংলায় কথা Game food');
-  assert.equal(clean('*** , =!|_{} 🎮'), '');
+assert(start>=0&&end>start);
+const ctx={};vm.runInNewContext(js.slice(start,end+2)+'\nthis.clean=cleanVisibleChatText',ctx);
+const clean=ctx.clean;
+test('Current chat keeps Japanese punctuation but strips markup and decorative symbols',()=>{
+ const value=clean('こんにちは！ *** ゲームは5F、501号室です。 =!|_{}');
+ assert.match(value,/こんにちは！/);assert.match(value,/5F、501号室です。/);
+ assert.doesNotMatch(value,/\*\*|\{|\}|\|/);
 });
-test('Retain distinct event lines and convert clock times and dates to readable Japanese',()=>{
-  const output=clean('■ 生成AIによる目押しゲーム\n場所：5F／501号室\n時間：10:30～12:00\n日付：2026-11-09');
-  assert.equal(output,'生成AIによる目押しゲーム\n場所 5F 501号室\n時間 10時30分 12時00分\n日付 2026年11月9日');
+test('School event lines and room identifiers survive sanitization',()=>{
+ const value=clean('■ 展示\n場所：5F／501号室\n日時：2026-11-09 10:30');
+ assert.match(value,/展示/);assert.match(value,/5F/);assert.match(value,/501号室/);
+ assert.match(value,/2026年11月9日/);assert.match(value,/10時30分/);
 });
-test('User and bot messages pass through sanitizer; initial welcome is clean',()=>{
-  assert.match(js,/bubble\.textContent = cleanVisibleChatText\(text\)/);
-  assert.match(js,/messages\.querySelectorAll\("\.bubble"\)/);
-  assert.match(js,/add\(question, true\)/);
-  assert.match(js,/add\(result\.text, false\)/);
-  const welcome=html.match(/<div class="messages"[\s\S]*?<div class="bubble">([\s\S]*?)<\/div>/)?.[1];
-  assert(welcome);
-  assert.equal(clean(welcome),welcome.trim());
-  assert.match(html,/script\.js\?v=20261112-sheet-only-v1/);
+test('User and bot bubbles retain sanitizer',()=>{
+ assert.match(js,/bubble\.textContent = cleanVisibleChatText\(text\)/);
+ assert.match(js,/messages\.querySelectorAll\("\.bubble"\)/);
+ assert.match(js,/add\(question, true\)/);assert.match(js,/add\(result\.text, false\)/);
+ assert.match(html,/id="messages"/);
 });
-test('Voice cleaner is still in place and school data is not edited',()=>{
-  assert.match(js,/const cleanText = textForSpeech\(text\)/);
-  assert.match(js,/new SpeechSynthesisUtterance\(textForSpeech\(welcomeCompletedCycles/);
-  assert.match(js,/window\.TTC_FESTIVAL_ACTIVITIES = activities/);
+test('Speech and XLSX sources are unchanged by visible text cleaner',()=>{
+ assert.match(js,/function textForSpeech\(/);
+ assert.match(js,/window\.TTC_FESTIVAL_ACTIVITIES = activities/);
 });

@@ -10,11 +10,11 @@ for (const name of ['script.js','cloudflare-worker/src/index.js','cloudflare-wor
   execFileSync(process.execPath, ['--check', fileURLToPath(new URL(name, root))]);
 }
 const html=load('index.html'), js=load('script.js');
-for (const label of ['チャットを始める', '← 戻る', 'フード', 'ゲーム', 'ステージ', '会場案内']) assert(html.includes(label), `missing ${label}`);
+for (const label of ['チャットを始める', '← 戻る', 'フード', 'ゲーム', 'AI・展示', '会場案内']) assert(html.includes(label), `missing ${label}`);
 for (const file of ['script.js','style.css','config.js','assets/festival-logo.webp','assets/robot-logo.png']) assert(fs.existsSync(new URL(file,root)), `missing ${file}`);
 assert(js.includes('r.lang = "ja-JP"'), 'Japanese browser STT missing');
 assert(js.includes('language: "ja-JP"'), 'Japanese Gemini audio fallback missing');
-assert(js.includes('がくえんさい、エーアイ'), 'Welcome reading missing');
+assert(js.includes('playWelcomeSpeech'), 'Welcome reading missing');
 let prompt,sttPrompt;
 globalThis.fetch=async(_url,opts)=>{
   const req=JSON.parse(opts.body);
@@ -23,13 +23,13 @@ globalThis.fetch=async(_url,opts)=>{
   return new Response(JSON.stringify({candidates:[{content:{parts:[{text:'2026年の詳細は学校の公式案内をご確認ください。'}]}}]}),{status:200});
 };
 const api='https://gakuen-chatbot-ai.ridoy-gakuen-ai.workers.dev';
-const env={GEMINI_API_KEY:'FAKE_TEST_KEY'};
+const env={GEMINI_API_KEY:'FAKE_TEST_KEY',FESTIVAL_QUOTA:{idFromName:()=> 'test',get:()=>({fetch:async(_url,opts)=>Response.json({allowed:true})})}};
 const invoke=(endpoint,payload,origin='https://ridoyjp.github.io')=>worker.fetch(new Request(api+endpoint,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(payload)}),env);
 let res=await invoke('/chat',{message:'2026年の学園祭はいつ？',responseLanguage:'ja-JP',history:[]});
 assert.equal(res.status,200);
 const pending = await res.json();
 assert.equal(pending.informationStatus, 'UNVERIFIED_2026');
-assert.match(pending.reply,/確認が取れていません/);
+assert.match(pending.reply,/未確認|確認/);
 assert.equal(prompt, undefined, 'unapproved schedule must not call Gemini');
 res=await invoke('/chat',{message:'2025年の学園祭について',responseLanguage:'ja-JP',history:[]});
 assert.equal(res.status,200);

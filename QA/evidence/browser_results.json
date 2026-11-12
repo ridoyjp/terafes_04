@@ -1,0 +1,426 @@
+{
+  "tests": [
+    [
+      "Desktop Chromium",
+      "Home visible",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Home icons 3",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "No overflow home",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Chat visible",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Menu initially closed",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Menu opens",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Five options",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Games choices populate",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Menu closed after event",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Guide reply 1101",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Local guide no API call",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Quota message offers menu",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "AI request reached quota route",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Offline food still replies",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "No extra Gemini call for local food",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Typed room works offline",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Typed room still zero extra AI",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Floor navigation shows room/event options",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Back returns home",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Reopen menu closed",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "No overflow chat",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "AI request stalled",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Menu usable during AI wait",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Event preempts pending AI",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Stalled AI replaced by local facts",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "No orphan typing bubble",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "Disconnected network offline notice",
+      true
+    ],
+    [
+      "Desktop Chromium",
+      "No JS pageerrors",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Home visible",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Home icons 3",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "No overflow home",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Chat visible",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Menu initially closed",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Menu opens",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Five options",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Games choices populate",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Menu closed after event",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Guide reply 1101",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Local guide no API call",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Quota message offers menu",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "AI request reached quota route",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Offline food still replies",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "No extra Gemini call for local food",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Typed room works offline",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Typed room still zero extra AI",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Floor navigation shows room/event options",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Back returns home",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Reopen menu closed",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "No overflow chat",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "AI request stalled",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Menu usable during AI wait",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Event preempts pending AI",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Stalled AI replaced by local facts",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "No orphan typing bubble",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "Disconnected network offline notice",
+      true
+    ],
+    [
+      "Android-size Chromium",
+      "No JS pageerrors",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Home visible",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Home icons 3",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "No overflow home",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Chat visible",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Menu initially closed",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Menu opens",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Five options",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Games choices populate",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Menu closed after event",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Guide reply 1101",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Local guide no API call",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Quota message offers menu",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "AI request reached quota route",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Offline food still replies",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "No extra Gemini call for local food",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Typed room works offline",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Typed room still zero extra AI",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Floor navigation shows room/event options",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Back returns home",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Reopen menu closed",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "No overflow chat",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "AI request stalled",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Menu usable during AI wait",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Event preempts pending AI",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Stalled AI replaced by local facts",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "No orphan typing bubble",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "Disconnected network offline notice",
+      true
+    ],
+    [
+      "iPhone-size Chromium",
+      "No JS pageerrors",
+      true
+    ]
+  ],
+  "pass": 84,
+  "total": 84
+}
