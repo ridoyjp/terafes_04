@@ -536,18 +536,28 @@ const deviceLanguage = (navigator.languages && navigator.languages[0]) || naviga
 function requestedVoiceLanguage() {
   return deviceLanguage;
 }
-// Conservative Romaji detection: do not treat ordinary English as Japanese.
-// Handles Japanese school questions written using Latin letters.
+// Romanized Japanese detection must work even when the device UI is English.
+// In particular, short unfinished phrases such as "nihon ki" should receive a
+// Japanese clarification, not an English API error. Do not hijack plain English.
 function isJapaneseRomaji(text) {
   const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
-  if (!q || /[\u0080-\uffff]/.test(q)) return false;
-  // A Japanese event name inside an English question is still English.
-  if (/\b(?:where|what|when|why|how|please|the|is|are|does|could|would|tell|show|about)\b/.test(q) &&
-      !/\b(?:desu|desuka|masu|masuka|oshiete|kudasai|onegaishimasu)\b/.test(q)) return false;
-  const japanesePhrases = /\b(?:konnichiwa|arigatou|watashi|gakuensai|geemu|kaijou|heya|desu|desuka|desu ka|masu|masuka|masu ka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|dare|doko|itsu|nanji|nani|nan desu|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|gakusai|gakuensai|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|wa dare|wa doko|wa nani|ni tsuite|no koto|tte nani|oshiete kudasai)\b/i;
-  const ttcSchoolRomaji = /\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|tokyo technical|higashi nakano)\b/i.test(q);
-  const japaneseGrammar = /\b(?:wa|no|ni|de|ga|wo|o)\b/i.test(q);
-  return japanesePhrases.test(q) || (ttcSchoolRomaji && japaneseGrammar);
+  if (!q || /[^\x00-\x7F]/.test(q)) return false;
+  const japaneseGrammar = /\b(?:wa|no|ni|ga|wo|o|de|desu|desuka|masu|masuka|ka|yo|ne)\b/;
+  const japanesePhrases = /\b(?:nihon|nippon|nihongo|nihonjin|watashi|anata|konnichiwa|ohayou|konbanwa|arigatou|gakkou|gakuensai|gakusai|geemu|kaijou|heya|kuni|rekishi|bunka|shuto|tabemono|tenki|ashita|kinou|kyou|dare|doko|itsu|nanji|nani|nan|naze|nande|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|desu|desuka|masu|masuka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|wakaranai|suki|ikitai)\b/;
+  const explicitEnglish = /\b(?:what|where|when|why|how|please|the|is|are|does|could|would|tell|show|about|explain|translate|meaning|history|capital|country|food|language)\b/;
+  if (explicitEnglish.test(q) && !japaneseGrammar.test(q)) return false;
+  const ttcSchoolRomaji = /\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|higashi nakano)\b/.test(q);
+  return japanesePhrases.test(q) || (ttcSchoolRomaji && japaneseGrammar.test(q));
+}
+
+// A partially typed phrase is not a question. Ask in Japanese for completion,
+// without contacting Gemini (especially helpful when the API quota is exhausted).
+function incompleteRomajiQuestion(text) {
+  const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g," ");
+  if (/^(?:nihon|nippon|nihongo)(?:\s+(?:ki|wa|no|ni|ga|de|o|wo|ka))?$/.test(q)) {
+    return "質問が途中のようです。何について知りたいか、最後まで入力してください。例：nihon no rekishi wo oshiete（日本の歴史を教えて）。";
+  }
+  return "";
 }
 
 // Small, offline Romaji -> Japanese keyboard helper. English and mixed-script
@@ -570,6 +580,7 @@ const ROMAJI_KANA = Object.freeze({
   xa:"ぁ",xi:"ぃ",xu:"ぅ",xe:"ぇ",xo:"ぉ",la:"ぁ",li:"ぃ",lu:"ぅ",le:"ぇ",lo:"ぉ",xtsu:"っ",ltsu:"っ"
 });
 const ROMAJI_TTC_WORDS = Object.freeze({
+  nihon:"日本",nippon:"日本",nihongo:"日本語",nihonjin:"日本人",rekishi:"歴史",shuto:"首都",kuni:"国",bunka:"文化",tabemono:"食べ物",tenki:"天気",
   gakuensai:"学園祭",gakusai:"学園祭",gakkou:"学校",gakka:"学科",kaijou:"会場",heya:"部屋",
   geemu:"ゲーム",game:"ゲーム",fuudo:"フード",food:"フード",furoa:"フロア",floor:"フロア",
   kafe:"カフェ",cafe:"カフェ",koohii:"コーヒー",kohi:"コーヒー",toire:"トイレ",
@@ -611,6 +622,7 @@ function prepareTypedQuestion(text) {
   const original = String(text || "").trim();
   // No changes to native Japanese IME, English, Bengali, or other languages.
   if (!isJapaneseRomaji(original)) return original;
+  if (incompleteRomajiQuestion(original)) return original;
   return original.replace(/[A-Za-z]+(?:'[A-Za-z]+)?/g, token => romajiWordToJapanese(token))
     .replace(/(?<=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])[ \t]+(?=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])/gu, "")
     .replace(/,/g,"、").replace(/\./g,"。").replace(/\?/g,"？").replace(/!/g,"！");
@@ -761,7 +773,7 @@ async function ask(question, spokenLanguage = "", schoolGuideAnswer = "") {
   // Static Excel questions are resolved BEFORE considering the AI state.
   // This also lets a visitor select an event during a slow Gemini request.
   const languageHint = spokenLanguage || detectWrittenLanguage(question) || requestedVoiceLanguage();
-  const localReply = schoolGuideAnswer || window.answerTtcFloorGuide?.(question, languageHint) || "";
+  const localReply = schoolGuideAnswer || incompleteRomajiQuestion(question) || window.answerTtcFloorGuide?.(question, languageHint) || "";
   if (pendingChat) {
     if (!localReply) return; // Avoid duplicate AI requests.
     cancelPendingAiReply();

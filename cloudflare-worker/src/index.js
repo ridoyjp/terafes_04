@@ -44,12 +44,25 @@ const SYSTEM_TEXT = `
 公式情報は更新されることがあります。重要な場合は学校公式サイトでの再確認を案内してください。
 `;
 
-// Romanized Japanese typed with a Latin keyboard should be answered in Japanese.
+// Japanese Romaji questions should be answered in Japanese, not English.
+// Stay conservative when English question words are present.
 function isJapaneseRomaji(text) {
   const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
   if (!q || /[^\x00-\x7F]/.test(q)) return false;
-  const phrases = /\b(?:desu|desuka|desu ka|masu|masuka|masu ka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|dare|doko|itsu|nanji|nani|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|gakusai|gakuensai|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|senmon|wa dare|wa doko|wa nani|ni tsuite|no koto|tte nani)\b/i;
-  return phrases.test(q) || (/\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|higashi nakano)\b/i.test(q) && /\b(?:wa|no|ni|de|ga|wo|o)\b/i.test(q));
+  const japaneseGrammar = /\b(?:wa|no|ni|ga|wo|o|de|desu|desuka|masu|masuka|ka|yo|ne)\b/;
+  const phrases = /\b(?:nihon|nippon|nihongo|nihonjin|watashi|anata|konnichiwa|ohayou|konbanwa|arigatou|gakkou|gakuensai|gakusai|geemu|kaijou|heya|kuni|rekishi|bunka|shuto|tabemono|tenki|ashita|kinou|kyou|dare|doko|itsu|nanji|nani|nan|naze|nande|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|desu|desuka|masu|masuka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|wakaranai|suki|ikitai)\b/;
+  const explicitEnglish = /\b(?:what|where|when|why|how|please|the|is|are|does|could|would|tell|show|about|explain|translate|meaning|history|capital|country|food|language)\b/;
+  if (explicitEnglish.test(q) && !japaneseGrammar.test(q)) return false;
+  const ttcSchoolRomaji = /\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|higashi nakano)\b/.test(q);
+  return phrases.test(q) || (ttcSchoolRomaji && japaneseGrammar.test(q));
+}
+
+function incompleteRomajiQuestion(text) {
+  const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
+  if (/^(?:nihon|nippon|nihongo)(?:\s+(?:ki|wa|no|ni|ga|de|o|wo|ka))?$/.test(q)) {
+    return "質問が途中のようです。何について知りたいか、最後まで入力してください。例：nihon no rekishi wo oshiete（日本の歴史を教えて）。";
+  }
+  return "";
 }
 
 function getRelevantSchoolData(message, history) {
@@ -465,6 +478,8 @@ export default {
     const effectiveResponseLanguage = romajiJapanese ? "ja-JP" : responseLanguage;
     // 2026 floor/room/exhibit facts are sourced from the user's school XLSX.
     // They do not imply approval of other dates, prices, safety locations or stalls.
+    const romajiClarification = incompleteRomajiQuestion(message);
+    if (romajiClarification) return json({ reply: romajiClarification, informationStatus: "INCOMPLETE_ROMAJI" }, 200, headers);
     const floorReply = answerFloorGuide(message, effectiveResponseLanguage ||
       (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US"));
     if (floorReply) return json({ reply: floorReply, informationStatus: "SCHOOL_FLOOR_GUIDE_2026" }, 200, headers);
