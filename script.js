@@ -1545,6 +1545,9 @@ function naturalSpeechText(value) {
     .replace(/([、。！？,.!?])\1{1,}/gu, "$1")
     .replace(/\s+/gu, " ")
     .trim();
+  // Speech only: do not pronounce commas, brackets or asterisks.
+  // Keep the visible chat message unchanged; spaces preserve word boundaries.
+  text = text.replace(/[、，,（()）＊*]/gu, " ").replace(/\s+/gu, " ").trim();
   // Avoid silent fragments that consist of separators alone.
   if (!/[\p{L}\p{N}]/u.test(text)) text = "";
   return text;
