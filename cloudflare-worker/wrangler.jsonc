@@ -23,6 +23,9 @@
     "GLOBAL_REQUESTS_PER_MINUTE": "25",
     "GLOBAL_REQUESTS_PER_DAY": "400",
     "USER_REQUESTS_PER_MINUTE": "6",
-    "USER_REQUESTS_PER_DAY": "50"
+    "USER_REQUESTS_PER_DAY": "100"
+  },
+  "ai": {
+    "binding": "AI"
   }
 }

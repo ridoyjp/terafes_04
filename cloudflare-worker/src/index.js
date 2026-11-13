@@ -186,6 +186,153 @@ async function requestGemini(endpoint, apiKey, payload, timeoutMs = 22000) {
   }
 }
 
+
+// Chat provider fallback: Gemini -> Groq -> Cloudflare Workers AI -> OpenRouter.
+// Each configured provider is attempted in order if the previous one fails.
+function geminiPayloadToMessages(payload) {
+  const messages = [];
+  const system = (payload.systemInstruction?.parts || []).map(p => p.text || '').join('\n').trim();
+  if (system) messages.push({ role: 'system', content: system });
+  for (const item of payload.contents || []) {
+    const content = (item.parts || []).map(p => p.text || '').join('\n').trim();
+    if (content) messages.push({ role: item.role === 'model' ? 'assistant' : 'user', content });
+  }
+  return messages;
+}
+
+async function requestGroq(env, payload, timeoutMs = 22000) {
+  if (!env.GROQ_API_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: String(env.GROQ_MODEL || 'openai/gpt-oss-20b'),
+        messages: geminiPayloadToMessages(payload),
+        temperature: 0.5,
+        max_tokens: 1200
+      }),
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    const text = typeof data.choices?.[0]?.message?.content === 'string'
+      ? data.choices[0].message.content.trim()
+      : '';
+    return {
+      provider: 'groq',
+      response: { ok: response.ok && !!text, status: response.ok && !text ? 502 : response.status },
+      result: { candidates: [{ content: { parts: [{ text }] } }], error: data.error }
+    };
+  } finally { clearTimeout(timer); }
+}
+
+async function requestCloudflareAI(env, payload) {
+  if (!env.AI || typeof env.AI.run !== 'function') return null;
+  const model = String(env.CF_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  const result = await env.AI.run(model, {
+    messages: geminiPayloadToMessages(payload),
+    max_tokens: 1200,
+    temperature: 0.5
+  });
+  const text = typeof result?.response === 'string' ? result.response :
+    typeof result?.result?.response === 'string' ? result.result.response : '';
+  return {
+    provider: 'cloudflare',
+    response: { ok: !!text, status: text ? 200 : 502 },
+    result: { candidates: [{ content: { parts: [{ text }] } }] }
+  };
+}
+
+// OpenRouter uses the OpenAI-compatible Chat Completions API.
+// The free model pool can change availability and may be rate limited.
+async function requestOpenRouter(env, payload, timeoutMs = 22000) {
+  if (!env.OPENROUTER_API_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://terafes04.vercel.app/',
+        'X-Title': 'TTC Gakuen-sai AI Assistant'
+      },
+      body: JSON.stringify({
+        model: String(env.OPENROUTER_MODEL || 'openrouter/free'),
+        messages: geminiPayloadToMessages(payload),
+        temperature: 0.5,
+        max_tokens: 1200
+      }),
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    const text = data.choices?.[0]?.message?.content;
+    return {
+      provider: 'openrouter',
+      response: { ok: response.ok && typeof text === 'string' && !!text.trim(), status: response.ok && typeof text === 'string' && !!text.trim() ? 200 : (response.ok ? 502 : response.status) },
+      result: {
+        candidates: [{ content: { parts: [{ text: typeof text === 'string' ? text : '' }] } }],
+        error: data.error
+      }
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function requestWithFallback(env, endpoint, payload) {
+  const failures = [];
+  const attempt = async (name, run) => {
+    try {
+      const outcome = await run();
+      if (!outcome) {
+        failures.push({ provider: name, status: 'NOT_CONFIGURED' });
+        return null;
+      }
+      if (outcome.response?.ok) { console.log('[AI] Provider success', name); return { ...outcome, provider: name }; }
+      failures.push({ provider: name, status: outcome.response?.status || 502 });
+      console.warn('[AI] Provider unavailable', {
+  provider: name,
+  status: outcome.response?.status,
+  error: outcome.result?.error?.message ||
+         outcome.result?.error?.status ||
+         'Unknown provider error'
+});
+    } catch (error) {
+      failures.push({ provider: name, status: error?.name || 'NETWORK_ERROR' });
+      console.warn('[AI] Provider exception', {
+  provider: name,
+  name: error?.name,
+  message: error?.message
+});
+    }
+    return null;
+  };
+
+  // Try the remaining providers even if Gemini's model/key is invalid.
+  // Each provider has its own credentials and availability.
+// Temporary test: skip Gemini
+const gemini = await attempt('gemini', () => env.GEMINI_API_KEY ? requestGemini(endpoint, env.GEMINI_API_KEY, payload) : null);
+  if (gemini) return gemini;
+// Temporary: Skip Groq to test Cloudflare AI
+const groq = await attempt('groq', () => requestGroq(env, payload));
+  if (groq) return groq;
+const cloudflare = await attempt('cloudflare', () => requestCloudflareAI(env, payload));
+  if (cloudflare) return cloudflare;
+
+  const openrouter = await attempt('openrouter', () => requestOpenRouter(env, payload));
+  if (openrouter) return openrouter;
+
+  console.error('[AI] All configured providers failed', failures);
+  return {
+    provider: 'none',
+    response: { ok: false, status: 503 },
+    result: { error: { status: 'ALL_PROVIDERS_FAILED' } }
+  };
+}
 async function hashString(value) {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -211,15 +358,12 @@ async function cacheWrite(cacheKey, data, seconds, context) {
 }
 
 function safeFaq(message, language) {
-  // Only stable official facts; festival dates/prices are handled separately.
   const q = String(message).toLowerCase().trim();
   if (/^(?:ttc|東京テクニカルカレッジ|tokyo technical college)(?:とは|って何|とは何ですか|とは\?|ってどんな学校| とは)?[？?。 ]*$/i.test(q)) {
     if (language === 'bn-BD') return 'TTC (東京テクニカルカレッジ) জাপানের টোকিওতে অবস্থিত একটি বিশেষায়িত কারিগরি কলেজ। কোর্স ও ভর্তি সম্পর্কে সর্বশেষ তথ্য স্কুলের অফিসিয়াল ওয়েবসাইটে দেখুন: https://tec.ttc.ac.jp/';
     if (language === 'en-US') return 'Tokyo Technical College (TTC) is a vocational college in Tokyo, Japan. Check its official website for the latest courses and admissions: https://tec.ttc.ac.jp/';
     return '東京テクニカルカレッジ（TTC）は東京都にある専門学校です。学科・入学に関する最新情報は公式サイトをご確認ください：https://tec.ttc.ac.jp/';
   }
-  // Never invent unapproved 2026 event details. This FAQ is available even
-  // during provider outages and does not call Gemini.
   if (/^(?:学校の公式サイト|公式サイト|official website|school website|স্কুলের ওয়েবসাইট)[？?。 ]*$/i.test(q)) {
     return language === 'bn-BD' ? 'স্কুলের অফিসিয়াল ওয়েবসাইট: https://tec.ttc.ac.jp/' :
       language === 'en-US' ? 'Official school website: https://tec.ttc.ac.jp/' :
@@ -229,7 +373,6 @@ function safeFaq(message, language) {
 }
 
 function publicSchoolQuestion(q) {
-  // Cache only public, non-personal, single-turn school/festival inquiries.
   const text = String(q || '').trim();
   const school = /\bTTC\b|東京テクニカル|専門学校|学校|学園祭|文化祭|東中野|校舎|学科|学校祭|festival|tokyo technical college|college|স্কুল|কলেজ|উৎসব/i.test(text);
   const sensitive = /@|https?:|\d{5,}|パスワード|住所は|私の|個人|電話番号|メール|my |mine|আমার|password|email|address|account|secret|token/i.test(text);
@@ -237,7 +380,6 @@ function publicSchoolQuestion(q) {
 }
 
 // Shared quota protection: all Cloudflare Worker isolates consult one SQLite Durable Object.
-// Counters only; never store raw IP, chat text, audio or Gemini keys.
 export class FestivalQuota {
   constructor(ctx) {
     this.sql = ctx.storage.sql;
@@ -251,8 +393,22 @@ export class FestivalQuota {
     const minute = now.toISOString().slice(0, 16);
     const get = key => this.sql.exec('SELECT count FROM counters WHERE bucket=?', key).toArray()[0]?.count ?? 0;
     if (action === 'stats') {
-      return Response.json({ day, admittedToday:get('a:'+day), blockedToday:get('b:'+day), chatToday:get('chat:'+day), voiceToday:get('voice:'+day), provider429Today:get('p429:'+day), providerErrorsToday:get('perr:'+day), currentMinute:get('m:'+minute), faqCacheHitsToday:get('hit:'+day), faqCacheStoresToday:get('store:'+day),
-        note:'Worker-side counters, not Google AI Studio usage. Daily counters reset at UTC midnight.' });
+      return Response.json({
+        day,
+        admittedToday: get('a:'+day),
+        blockedToday: get('b:'+day),
+        chatToday: get('chat:'+day),
+        voiceToday: get('voice:'+day),
+        provider429Today: get('p429:'+day),
+        providerErrorsToday: get('perr:'+day),
+        currentMinute: get('m:'+minute),
+        requesterToday: get('u:'+day+':'+client),
+        requesterCurrentMinute: get('um:'+minute+':'+client),
+        faqCacheHitsToday: get('hit:'+day),
+        faqCacheStoresToday: get('store:'+day),
+        limits,
+        note: 'Worker-side counters only. Daily counters reset at UTC midnight. Requester counters refer to the IP making this admin request.'
+      });
     }
     if (action === 'cache_get') {
       if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey)) return Response.json({ hit:false });
@@ -265,7 +421,6 @@ export class FestivalQuota {
       if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey) || typeof reply !== 'string' || reply.length>5000 || !reply || !Number.isInteger(ttl) || ttl<60 || ttl>1800) return Response.json({ok:false},{status:400});
       this.sql.exec('INSERT INTO faq_cache(key,reply,expires) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET reply=excluded.reply,expires=excluded.expires',cacheKey,reply,Date.now()+ttl*1000);
       this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1','store:'+day);
-      // Bound old cache & counter growth. Incremental cleanup avoids per-request writes.
       if (Math.random()<0.04) {
         this.sql.exec('DELETE FROM faq_cache WHERE expires < ?',Date.now());
         this.sql.exec("DELETE FROM counters WHERE bucket LIKE 'u:%' AND bucket < ?",'u:'+new Date(Date.now()-3*86400000).toISOString().slice(0,10));
@@ -277,15 +432,24 @@ export class FestivalQuota {
       this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', key);
       return Response.json({ ok:true });
     }
+    if (action !== 'admit') return Response.json({error:'Unknown quota action'},{status:400});
     const keys = [['m:'+minute,limits.globalMinute],['a:'+day,limits.globalDay],['u:'+day+':'+client,limits.userDay],['um:'+minute+':'+client,limits.userMinute]];
-    const denied = keys.some(([key,limit]) => get(key)>=limit);
-    if (denied) {
+    const exceeded = keys.find(([key,limit]) => get(key)>=limit);
+    if (exceeded) {
+      const [key, limit] = exceeded;
+      const reason = key.startsWith('um:') ? 'USER_MINUTE_LIMIT'
+        : key.startsWith('u:') ? 'USER_DAILY_LIMIT'
+        : key.startsWith('m:') ? 'GLOBAL_MINUTE_LIMIT'
+        : 'GLOBAL_DAILY_LIMIT';
+      const retryAfter = reason.includes('MINUTE')
+        ? Math.max(1, 60 - now.getUTCSeconds())
+        : Math.max(1, Math.ceil((Date.parse(day+'T00:00:00.000Z')+86400000-Date.now())/1000));
       this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', 'b:'+day);
-      return Response.json({ allowed:false });
+      console.warn('[QUOTA] Request blocked', {reason, current:get(key), limit, retryAfter});
+      return Response.json({allowed:false,reason,retryAfter});
     }
     for(const [key] of keys) this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1',key);
     this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1',kind+':'+day);
-    // Only short-window per visitor counters need cleanup; older daily counters also expire.
     if (Math.random()<0.01) this.sql.exec("DELETE FROM counters WHERE bucket LIKE 'um:%' AND bucket < ?", 'um:'+new Date(Date.now()-180000).toISOString().slice(0,16));
     return Response.json({ allowed:true });
   }
@@ -295,7 +459,9 @@ function quotaStub(env) {
   if (!env.FESTIVAL_QUOTA) throw Object.assign(new Error('QUOTA_NOT_CONFIGURED'),{status:503});
   return env.FESTIVAL_QUOTA.get(env.FESTIVAL_QUOTA.idFromName('festival-global-v1'));
 }
+
 const clampLimit=(value,fallback)=>Math.max(1,Math.min(100000,Number(value)||fallback));
+
 async function quotaAction(env, request, kind='chat', action='admit', additional={}) {
   const address = request.headers.get('CF-Connecting-IP') || 'unknown';
   const secret = env.RATE_LIMIT_SALT || env.GEMINI_API_KEY || 'not-configured';
@@ -310,16 +476,30 @@ async function quotaAction(env, request, kind='chat', action='admit', additional
   if(!result.ok) throw Object.assign(new Error('QUOTA_UNAVAILABLE'),{status:503});
   return result.json();
 }
+
 async function admitted(env,request,kind,headers) {
   try {
     const answer=await quotaAction(env,request,kind);
-    if (!answer.allowed) return json({error:'Festival AI is busy or free quota safety limit reached. Please try later. School FAQ remains available.'},429,headers);
+    if (!answer.allowed) {
+      // Return the precise Worker-side quota reason. Do not bypass or reset
+      // shared Durable Object counters: deployments do not reset daily usage.
+      const reason = typeof answer.reason === 'string' ? answer.reason : 'QUOTA_LIMIT_REACHED';
+      const retryAfter = Number.isFinite(Number(answer.retryAfter))
+        ? Math.max(1, Math.ceil(Number(answer.retryAfter))) : 60;
+      return json({
+        error: 'Festival AI request limit reached. Please retry later. School FAQ remains available.',
+        code: 'QUOTA_LIMIT_REACHED',
+        reason,
+        retryAfter
+      }, 429, { ...headers, 'Retry-After': String(retryAfter) });
+    }
     return null;
   } catch (error) {
     console.error('Shared quota unavailable:',error?.name);
     return json({error:'AI is temporarily unavailable. Please try again later.'},503,headers);
   }
 }
+
 function trackProviderError(env,request,status,ctx) {
   const job=quotaAction(env,request,status===429?'429':'error','event').catch(()=>{});
   ctx?.waitUntil?.(job);
@@ -329,37 +509,26 @@ export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin") || "";
 
-   const allowedOrigins = [
-  DEFAULT_ORIGIN,
-  "https://terafes04.vercel.app",
-  ...String(env.EXTRA_ALLOWED_ORIGINS || "")
+    const allowedOrigins = [
+      DEFAULT_ORIGIN,
+      "https://terafes04.vercel.app",
+      ...String(env.EXTRA_ALLOWED_ORIGINS || "")
         .split(",")
         .map(x => x.trim())
         .filter(Boolean)
     ];
 
     const allowed = allowedOrigins.includes(origin);
-
-    const headers = corsHeaders(
-      allowed ? origin : DEFAULT_ORIGIN
-    );
-
+    const headers = corsHeaders(allowed ? origin : DEFAULT_ORIGIN);
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
       if (!allowed) {
         return json({ error: "Origin not allowed" }, 403, headers);
       }
-
-      return new Response(null, {
-        status: 204,
-        headers
-      });
+      return new Response(null, { status: 204, headers });
     }
 
-    // Admin reads are token-authenticated. No browser cross-origin response
-    // permissions are granted to unknown Origins, even with a valid token.
-    // Private, read-only monitoring. Never expose counters to the public site.
     if (url.pathname === "/admin/usage") {
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, headers);
       const token = request.headers.get("Authorization") || "";
@@ -368,12 +537,10 @@ export default {
       catch { return json({error:'Monitoring unavailable'},503,headers); }
     }
 
-    // Multilingual speech-to-text: audio is processed in memory, not stored.
     if (url.pathname === "/transcribe") {
       if (!allowed) return json({ error: "Origin not allowed" }, 403, headers);
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, headers);
       if (!env.GEMINI_API_KEY) return json({ error: "Gemini API Key is not configured" }, 503, headers);
-      // Base64 audio payload max ~2.1 MB; request body limit includes JSON overhead.
       if (Number(request.headers.get("Content-Length") || 0) > 3_000_000) {
         return json({ error: "Recording too large" }, 413, headers);
       }
@@ -392,7 +559,7 @@ export default {
       }
       const voiceLimit = await admitted(env, request, "voice", headers);
       if (voiceLimit) return voiceLimit;
-      const model = String(env.GEMINI_AUDIO_MODEL || "gemini-3.8-flash").trim();
+      const model = String(env.GEMINI_AUDIO_MODEL || "gemini-2.5-flash").trim();
       const japaneseOnly = voiceData?.language === "ja-JP";
       try {
         const { response, result } = await withLocalQueue(() => requestGemini(
@@ -430,7 +597,7 @@ export default {
       return json({ error: "Method not allowed" }, 405, headers);
     }
 
-    if (
+        if (
       Number(request.headers.get("Content-Length") || 0) > 14000
     ) {
       return json({ error: "Request too large" }, 413, headers);
@@ -468,6 +635,7 @@ export default {
     const allowedLocales = new Set(["bn-BD","en-US","ja-JP","hi-IN","ur-PK","ar-SA","es-ES","fr-FR","de-DE","pt-BR","zh-CN","ko-KR","id-ID","th-TH","vi-VN","si-LK"]);
     const responseLanguage = typeof data.responseLanguage === "string" && allowedLocales.has(data.responseLanguage)
       ? data.responseLanguage : "";
+
     const LANGUAGE_NAMES = {
       "bn-BD": "Bengali (বাংলা)", "en-US": "English", "ja-JP": "Japanese (日本語)",
       "hi-IN": "Hindi", "ur-PK": "Urdu", "ar-SA": "Arabic", "es-ES": "Spanish",
@@ -475,63 +643,87 @@ export default {
       "zh-CN": "Chinese", "ko-KR": "Korean", "id-ID": "Indonesian",
       "th-TH": "Thai", "vi-VN": "Vietnamese", "si-LK": "Sinhala"
     };
+
     const romajiJapanese = isJapaneseRomaji(message);
     const effectiveResponseLanguage = romajiJapanese ? "ja-JP" : responseLanguage;
+
     // 2026 floor/room/exhibit facts are sourced from the user's school XLSX.
-    // They do not imply approval of other dates, prices, safety locations or stalls.
     const romajiClarification = incompleteRomajiQuestion(message);
     if (romajiClarification) return json({ reply: romajiClarification, informationStatus: "INCOMPLETE_ROMAJI" }, 200, headers);
+
     const floorReply = answerFloorGuide(message, effectiveResponseLanguage ||
       (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US"));
+
     if (floorReply) return json({ reply: floorReply, informationStatus: "SCHOOL_FLOOR_GUIDE_2026" }, 200, headers);
-    // When official 2026 data is missing, answer common exact festival-detail
-    // questions deterministically instead of asking a model to guess dates,
-    // prices, floor numbers or food menus. Also saves a Gemini request.
+
     const approved2026 = FESTIVAL_DATA.status === "APPROVED" &&
       Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
+
     const refersTo2025 = /2025|昨年|去年|last year|previous year|গত বছর/i.test(message);
-    // Only known TTC-specific prompts get the festival-only offline fallback.
-    // Generic festivals anywhere in the world are answered by Gemini.
+
     const isFestivalSpecific = shouldUseFestivalFloorGuide(message);
+
     const isFestivalQuickTopic = /^(食べ物はどこですか|ゲームはありますか|ステージについて教えて|会場の場所を教えて|開催時間を教えて|トイレはどこですか)$/.test(message.trim());
+
     const seeksSpecifics = /いつ|日時|日付|何時|時間|値段|料金|価格|いくら|どこ|場所|何階|教室|マップ|地図|予定|出店|屋台|食品|食べ物|フード|ゲーム|ステージ|会場|内容|スケジュール|タイムテーブル|おすすめ|トイレ|受付|日程|start|when|where|date|time|price|food|stall|map|game|stage|schedule|cost|location|event|কবে|কোথায়|দাম|সময়|খাবার/i.test(message);
+
     if (!approved2026 && !refersTo2025 && ((isFestivalSpecific && seeksSpecifics) || isFestivalQuickTopic)) {
       const lang = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US");
+
       const reply = lang === "bn-BD"
         ? "স্কুলের দেওয়া ২০২৬ ফ্লোর গাইডে প্রদর্শনী ও রুমের তথ্য আছে। তবে উৎসবের সামগ্রিক সময়, মূল্য ও অন্যান্য অনুল্লিখিত তথ্য নিশ্চিত করা যায়নি। অফিসিয়াল ঘোষণা বা স্টাফের সঙ্গে যাচাই করুন।"
         : lang === "en-US"
           ? "The supplied 2026 floor guide lists exhibits and rooms, but overall festival opening hours, prices and other unlisted details remain unconfirmed. Please check official announcements or ask festival staff."
           : "2026年のフロア別展示・教室情報は提供されたフロアガイドで確認できますが、開催全体の時間・料金など、シートにない詳細は未確認です。学校の公式案内または担当の先生にご確認ください。";
+
       return json({ reply, informationStatus: "UNVERIFIED_2026" }, 200, headers);
     }
+
     const inferredLanguage = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? 'bn-BD' : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? 'ja-JP' : 'en-US');
-    // Deterministic FAQ only for independent questions; preserve multi-turn context.
+
     if (!history.length) {
       const faq = safeFaq(message, inferredLanguage);
       if (faq) return json({ reply: faq }, 200, headers);
     }
-    // Cache exact single-turn, short, non-personal prompts only. Never cache
-    // conversation histories or text containing likely personal information.
+
     const cacheable = history.length === 0 && publicSchoolQuestion(message);
-    const cacheKeyData = { v: 1, model, message: message.normalize('NFKC').toLowerCase(), language: effectiveResponseLanguage,
+
+    const cacheKeyData = {
+      v: 1,
+      model,
+      message: message.normalize('NFKC').toLowerCase(),
+      language: effectiveResponseLanguage,
       festivalVersion: FESTIVAL_DATA.last_verified || FESTIVAL_DATA.status,
-      schoolVersion: '2026-11-12-official-2', routingVersion:'general-topics-v3' };
-    const cached = cacheable ? await cacheRead(request, 'chat', cacheKeyData) : { cacheKey: null, data: null };
+      schoolVersion: '2026-11-12-official-2',
+      routingVersion: 'general-topics-v3'
+    };
+
+    const cached = cacheable
+      ? await cacheRead(request, 'chat', cacheKeyData)
+      : { cacheKey: null, data: null };
+
     if (cached.data?.reply) return json(cached.data, 200, headers);
-    const sharedKey = cacheable ? await hashString('public-faq-v2:' + JSON.stringify(cacheKeyData)) : null;
+
+    const sharedKey = cacheable
+      ? await hashString('public-faq-v2:' + JSON.stringify(cacheKeyData))
+      : null;
+
     if (sharedKey) {
       try {
-        const result = await quotaAction(env, request, 'chat', 'cache_get', { cacheKey:sharedKey });
+        const result = await quotaAction(env, request, 'chat', 'cache_get', { cacheKey: sharedKey });
+
         if (result.hit && typeof result.reply === 'string') {
-          if (cached.cacheKey) await cacheWrite(cached.cacheKey,{reply:result.reply},900,ctx);
-          return json({reply:result.reply},200,headers);
+          if (cached.cacheKey) await cacheWrite(cached.cacheKey, { reply: result.reply }, 900, ctx);
+          return json({ reply: result.reply }, 200, headers);
         }
-      } catch (error) { console.warn('Shared cache unavailable:',error?.name); }
+      } catch (error) {
+        console.warn('Shared cache unavailable:', error?.name);
+      }
     }
-    if (!env.GEMINI_API_KEY) {
-      return json({ error: "Gemini API Key is not configured" }, 503, headers);
-    }
+
+
     const targetLanguage = LANGUAGE_NAMES[effectiveResponseLanguage] || "the language of the latest user message";
+
     const languageRule = `
 CRITICAL OUTPUT LANGUAGE POLICY:
 If the latest user question is Japanese written in Romaji (Latin-letter transcription), answer in natural Japanese script (漢字・ひらがな・カタカナ), NOT English or Romaji.
@@ -581,36 +773,77 @@ For TTC official facts, follow only the official sources provided below. If deta
     try {
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
         encodeURIComponent(model) + ":generateContent";
+
       const payload = {
         systemInstruction: {
-          parts: [{ text: SYSTEM_TEXT + languageRule + "\n\n" + getApprovedFestivalContext(message) + "\n\n" + getRelevantSchoolData(message, history) }]
-        }, contents, generationConfig: { temperature: 0.5, maxOutputTokens: 1200 }
+          parts: [{
+            text: SYSTEM_TEXT + languageRule +
+              "\n\n" + getApprovedFestivalContext(message) +
+              "\n\n" + getRelevantSchoolData(message, history)
+          }]
+        },
+        contents,
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 1200
+        }
       };
-      // Deduplicate simultaneous public requests *before* quota admission.
-      // A single upstream call should count as a single quota admission.
+
+      // Deduplicate simultaneous public requests before quota admission.
       const dedupeKey = cacheable ? await hashString(JSON.stringify(cacheKeyData)) : null;
+
       let promise = dedupeKey && sharedRequests.get(dedupeKey);
+
       if (!promise) {
         promise = (async () => {
           const quotaResponse = await admitted(env, request, "chat", headers);
           if (quotaResponse) return { quotaResponse };
-          return withLocalQueue(() => requestGemini(endpoint, env.GEMINI_API_KEY, payload));
+
+          return withLocalQueue(() => requestWithFallback(env, endpoint, payload));
         })();
+
         if (dedupeKey) {
           sharedRequests.set(dedupeKey, promise);
-          promise.finally(() => { if (sharedRequests.get(dedupeKey) === promise) sharedRequests.delete(dedupeKey); }).catch(() => {});
+
+          promise.finally(() => {
+            if (sharedRequests.get(dedupeKey) === promise) {
+              sharedRequests.delete(dedupeKey);
+            }
+          }).catch(() => {});
         }
       }
+
       const outcome = await promise;
+
       if (outcome.quotaResponse) return outcome.quotaResponse;
+
       const { response, result } = outcome;
+
       if (!response.ok) {
-        trackProviderError(env,request,response.status,ctx);
-        console.error("Gemini API Error:", { model, httpStatus: response.status, providerStatus: result?.error?.status });
-        if (response.status === 429) return json({ error: "AIの利用上限に達しました。" }, 429, headers);
-        if (response.status === 404) return json({ error: "Geminiモデルが見つかりません。Workerログをご確認ください。" }, 502, headers);
+        trackProviderError(env, request, response.status, ctx);
+
+        console.error("AI provider error:", {
+          provider: outcome.provider || "gemini",
+          model,
+          httpStatus: response.status,
+          providerStatus: result?.error?.status
+        });
+
+        if (result?.error?.status === 'ALL_PROVIDERS_FAILED') {
+          return json({ error: 'All configured AI providers are unavailable.', code: 'ALL_PROVIDERS_FAILED' }, 503, headers);
+        }
+
+        if (response.status === 429) {
+          return json({ error: "AIの利用上限に達しました。" }, 429, headers);
+        }
+
+        if (response.status === 404) {
+          return json({ error: "AI model is unavailable. Please check provider configuration." }, 502, headers);
+        }
+
         return json({ error: "AIサービスに接続できませんでした。" }, 502, headers);
       }
+
       const reply = (
         result.candidates?.[0]?.content?.parts || []
       )
@@ -627,17 +860,30 @@ For TTC official facts, follow only the official sources provided below. If deta
       }
 
       const resultData = { reply: reply.slice(0, 5000) };
+
       if (cacheable) {
-        await cacheWrite(cached.cacheKey,resultData,900,ctx);
-        if (sharedKey) ctx?.waitUntil?.(quotaAction(env,request,'chat','cache_put',{cacheKey:sharedKey,reply:resultData.reply,ttl:900}).catch(()=>{}));
+        await cacheWrite(cached.cacheKey, resultData, 900, ctx);
+
+        if (sharedKey) {
+          ctx?.waitUntil?.(
+            quotaAction(env, request, 'chat', 'cache_put', {
+              cacheKey: sharedKey,
+              reply: resultData.reply,
+              ttl: 900
+            }).catch(() => {})
+          );
+        }
       }
+
       return json(resultData, 200, headers);
 
     } catch (error) {
-      console.error("Gemini request failed:", error?.name);
+      console.error("AI provider request failed:", error?.name);
 
       return json({
-        error: error?.status === 503 ? "AIが混み合っています。少し後でお試しください。" : "AIへの接続がタイムアウトしました。"
+        error: error?.status === 503
+          ? "AIが混み合っています。少し後でお試しください。"
+          : "AIへの接続がタイムアウトしました。"
       }, error?.status === 503 ? 503 : 504, headers);
     }
   }
