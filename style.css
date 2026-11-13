@@ -773,3 +773,46 @@ select {
 .ttc-chat-bubble .ttc-festival-choice{cursor:pointer;text-align:left;overflow-wrap:anywhere;min-height:46px}
 .ttc-chat-bubble .ttc-festival-choice:hover{border-color:#4cabc4;transform:translateY(-1px)}
 .ttc-chat-bubble .ttc-fact-text{white-space:pre-wrap;overflow-wrap:anywhere}
+
+
+/* Mobile layout alignment — presentation only; no JS/voice/API changes. */
+@media (max-width: 768px) {
+  html, body { width:100%; max-width:100%; overflow-x:hidden; }
+  .intro, .chat, .chat.active { width:100%!important; max-width:100%!important; height:100dvh!important; min-height:0!important; }
+  .intro { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding: max(50px,env(safe-area-inset-top)) 16px max(48px,env(safe-area-inset-bottom))!important; overflow-y:auto; overflow-x:hidden; }
+  .intro-logo { flex-shrink:0; width:min(36vw,150px)!important; max-height:12dvh!important; margin:0 auto 6px!important; }
+  .intro .welcome-robot-stage { flex:0 1 auto; width:min(40vw,180px)!important; max-height:25dvh!important; margin:0 auto 4px!important; }
+  .intro h1 { font-size:clamp(38px,11vw,64px)!important; line-height:1.06!important; margin:3px 0 8px!important; }
+  .intro p { max-width:36rem; margin:0 auto 12px!important; line-height:1.55!important; }
+  .intro .start { flex-shrink:0; margin:4px auto 0!important; padding:12px 34px!important; }
+  .intro-features { margin-top:12px!important; justify-content:center; }
+  .intro-bottom { pointer-events:none; }
+  .chat-content { width:100%; min-width:0; min-height:0; }
+  .chat .head { position:relative; padding:12px 90px 12px 12px!important; gap:9px!important; min-height:78px!important; }
+  .chat .head img { width:54px!important; height:54px!important; flex:0 0 54px; }
+  .chat .head h1 { font-size:clamp(13px,3.6vw,18px)!important; line-height:1.25; }
+  .chat .head p { font-size:10px!important; margin-bottom:3px; }
+  .chat .head .back-btn { right:9px!important; padding:8px 9px!important; font-size:12px!important; white-space:nowrap; }
+  .chat-banner { padding:10px 14px!important; min-height:72px!important; }
+  .chat-banner strong { font-size:clamp(17px,5vw,22px)!important; }
+  .topics { flex-wrap:nowrap!important; overflow-x:auto!important; overflow-y:hidden!important; flex-shrink:0; padding:9px 10px!important; }
+  .topics button { flex:0 0 auto; white-space:nowrap; }
+  .chat .messages { min-height:0!important; overflow-y:auto!important; overflow-x:hidden!important; padding:14px 12px!important; }
+  .chat .composer { flex-shrink:0; width:calc(100% - 20px)!important; margin:7px 10px 3px!important; }
+  .chat .foot { flex-shrink:0; padding-bottom:max(8px,env(safe-area-inset-bottom))!important; }
+}
+@media (max-width: 380px) {
+  .intro .welcome-robot-stage { width:min(36vw,145px)!important; max-height:21dvh!important; }
+  .intro h1 { font-size:clamp(35px,10vw,45px)!important; }
+  .chat .head { padding-right:76px!important; }
+  .chat .head img { width:44px!important; height:48px!important; flex-basis:44px; }
+  .chat .head .back-btn { right:6px!important; padding:7px!important; font-size:11px!important; }
+}
+@media (max-height: 650px) and (max-width: 768px) {
+  .intro { justify-content:flex-start; gap:3px; }
+  .intro-logo { max-height:9dvh!important; }
+  .intro .welcome-robot-stage { width:min(23dvh,125px)!important; max-height:18dvh!important; }
+  .intro h1 { font-size:clamp(34px,8dvh,48px)!important; }
+  .intro p { font-size:11px!important; margin-bottom:5px!important; }
+  .intro-features { margin-top:6px!important; }
+}

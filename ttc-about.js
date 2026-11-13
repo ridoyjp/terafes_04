@@ -20,7 +20,7 @@
     ['🔄 AI切り替え','AIサービスに障害がある場合は別のサービスを順に試します。']
   ];
   const actions = `<div class="ttc-chat-actions"><button type="button" data-ttc-chat="about">✨ アプリ紹介</button><button type="button" data-ttc-chat="school">🏫 学校情報</button><button type="button" data-ttc-chat="team">👥 開発チーム</button></div>`;
-  const team = () => `<h3>👥 Tera Fes Young Group</h3><p>4名で協力して企画・制作・改善に取り組んだチームプロジェクトです。</p><div class="ttc-team-grid">${members.map(m => `<article class="ttc-card"><div class="ttc-avatar">${m.photo ? `<img src="${esc(m.photo)}" alt="${esc(m.name)}のプロフィール写真" loading="lazy">` : esc(m.initials)}</div><h4>${esc(m.name)}</h4><span class="ttc-badge">${esc(m.role)}</span><p>${esc(m.description)}</p></article>`).join('')}</div>`;
+  const team = () => `<h3>👥 terafes_04</h3><p>4名で協力して企画・制作・改善に取り組んだチームプロジェクトです。</p><div class="ttc-team-grid">${members.map(m => `<article class="ttc-card"><div class="ttc-avatar">${m.photo ? `<img src="${esc(m.photo)}" alt="${esc(m.name)}のプロフィール写真" loading="lazy">` : esc(m.initials)}</div><h4>${esc(m.name)}</h4><span class="ttc-badge">${esc(m.role)}</span><p>${esc(m.description)}</p></article>`).join('')}</div>`;
   const about = () => `<h2>✨ このアプリについて</h2><p><strong>TTC 学園祭 2026 多言語AIチャットボット</strong>は、来場者や学生が学校・学園祭の情報を気軽に調べられるように制作したWebアプリです。</p><h3>🎯 開発目的</h3><p>学園祭の会場案内や学校情報を分かりやすく提供し、外国人来場者も使いやすい案内を目指しています。</p><h3>✨ 主な機能</h3><div class="ttc-info-grid">${features.map(([name,description])=>`<article class="ttc-card"><h4>${esc(name)}</h4><p>${esc(description)}</p></article>`).join('')}</div><h3>⚙️ 仕組み</h3><p>登録された学校・学園祭の情報を参照し、必要に応じてAI APIに問い合わせます。利用できない場合は別のAIサービスを順番に試します。</p>${team()}`;
   const school = () => {
     const facts = Array.isArray(window.TTC_SCHOOL_GUIDE) ? window.TTC_SCHOOL_GUIDE : [];
