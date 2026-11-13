@@ -370,7 +370,7 @@ function answerFloorGuide(question, language = "ja-JP") {
     return `■ ${e.floor}${room}  ${detail}${department}${schedule}`;
   });
   const note = isBengali ? '※ শিটে উল্লেখ নেই এমন সময়, মূল্য বা সুবিধার অবস্থান অনুমান করা হয়নি।' : isEnglish ? '※ Times, prices and facility locations absent from the sheet are not assumed.' : '※ シートに記載のない開催時間・料金・設備の場所は推測していません。';
-  return `${intro}\n${lines.join('\n\n')}\n\n${note}`;
+  return `${intro}\n${lines.join('\n\n')}`;
 }
 
 window.answerTtcFloorGuide = answerFloorGuide;

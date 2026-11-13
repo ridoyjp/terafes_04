@@ -768,3 +768,8 @@ select {
   margin-right: 0.22em;
   flex-shrink: 0;
 }
+
+/* Festival choices inside the chat transcript, matching About/School cards */
+.ttc-chat-bubble .ttc-festival-choice{cursor:pointer;text-align:left;overflow-wrap:anywhere;min-height:46px}
+.ttc-chat-bubble .ttc-festival-choice:hover{border-color:#4cabc4;transform:translateY(-1px)}
+.ttc-chat-bubble .ttc-fact-text{white-space:pre-wrap;overflow-wrap:anywhere}

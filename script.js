@@ -156,7 +156,7 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
     if (!entries.length) return "学校資料には該当する情報がありません。";
     return "📍 TTC FESTIVAL 2026 学校提供フロアガイド\n\n" + entries.map(e =>
       `■ ${e.floor}${roomName(e)}\n${e.description}${parentDetails(e)}`
-    ).join("\n\n") + "\n\n※ 学校資料にない会場情報・料金は推測していません。";
+    ).join("\n\n");
   }
   function activityAnswer(items) {
     if (!items.length) return "学校資料には該当する企画がありません。";
@@ -403,7 +403,24 @@ document.querySelectorAll("#infoList [data-q]").forEach(button => {
 document.getElementById("introLogo").src =
   document.querySelector(".head img").src;
 
+// Every visit starts a fresh, welcoming conversation. Keep AI/voice settings intact.
+function resetConversationForNewVisit() {
+  cancelPendingAiReply();
+  closeInfoMenu();
+  const historyElement = document.getElementById("messages");
+  historyElement.replaceChildren();
+  historyElement.style.paddingBottom = "";
+  historyElement.scrollTop = 0;
+  chatHistory.length = 0;
+  lastQuestionLanguage = "";
+  const field = document.getElementById("input");
+  if (field) field.value = "";
+  add("こんにちは！TTC 学園祭 2026へようこそ！🎉\n学園祭の見どころやおいしいフード、ゲーム・体験、AI展示、会場の場所などをご案内します。\n気になることは、上のメニューから選ぶだけ！もちろん、文字やマイクでの質問も大歓迎です。\nぜひいろいろな企画を見つけて、学園祭を思いきり楽しんでくださいね！😊");
+  historyElement.scrollTop = 0;
+}
+
 function openChat() {
+  resetConversationForNewVisit();
   // Start Now must never restore an old information category from before Back.
   closeInfoMenu();
   stopWelcomeSpeech();
@@ -416,6 +433,7 @@ function openChat() {
 }
 
 function closeChat() {
+  resetConversationForNewVisit();
   // Back means leave the entire chat view, not just the conversation area.
   cancelPendingAiReply();
   closeInfoMenu();

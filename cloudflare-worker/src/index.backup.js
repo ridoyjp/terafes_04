@@ -1,0 +1,892 @@
+import { getOfficialSchoolFacts } from "./official-school-facts.js";
+import { SCHOOL_DATA } from "./school-data.js";
+import { FESTIVAL_DATA } from "./festival-data.js";
+import { FLOOR_GUIDE, answerFloorGuide, shouldUseFestivalFloorGuide } from "./floor-guide-data.js";
+
+
+/*
+  TTC 学園祭 Chat Bot 2026
+  Cloudflare Worker + Google Gemini
+  API key stays in Cloudflare Secrets.
+*/
+
+const DEFAULT_ORIGIN = "https://ridoyjp.github.io";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const MAX_MESSAGE = 1200;
+
+const SYSTEM_TEXT = `
+あなたは「TTC 学園祭 2026」の親切な多言語AIアシスタントです。学校案内だけのボットではありません。
+
+【回答ルール】
+- 学校以外の幅広い質問にも答えてください（知識、学習、数学、コード、翻訳、日常の質問など）。
+- **最新の質問を最優先**：旅行、料理、歴史、科学、ニュース、プログラミング、一般的な学校制度などの質問は、通常の汎用アシスタントとして直接答えてください。TTCの情報を勝手に差し込まないでください。
+- TTC・学園祭の資料はその話題が明確な時だけ使い、関係のない話題には出さないでください。質問が曖昧な場合は短く確認してください。
+- インターネットのリアルタイム検索機能を持つとは主張しないでください。最新ニュース、値段、法律、天気などの更新情報は確認できない場合、古い可能性があると説明してください。
+- ユーザーの最新の質問で使われた言語と同じ言語で返答してください。日本語は日本語、বাংলা は বাংলা、English は English、ほかの言語も可能な範囲で対応してください。
+- 入力が音声認識経由で、明示的な responseLanguage が渡されている場合、その言語を優先してください。
+- 言語が不明なら質問の文脈または直近のやり取りに合わせてください。
+- すべての言語・音声に完全対応していると断言しないでください。
+- 学園祭以外にも、プログラミング、勉強、翻訳、
+  一般知識などの質問に答えてください。
+- わかりやすく、親切に説明してください。
+- 事実が不明な場合は推測で断定しないでください。
+
+【学園祭の情報源ポリシー】
+学園祭2026については、【2026年 学園祭・先生承認データ】に加え、ユーザーが学校から提供された【2026年 フロアガイド掲載情報】の内容のみ参照できます。フロアガイドの提供はその他の日時・料金・設備情報の承認を意味しません。
+その情報にない開催日時、価格、教室番号、出店、出演者、トイレ場所等を作らないでください。
+- フロアガイドに階だけ掲載され部屋番号が空欄の企画は、場所を「1F」など階のみで案内してください。部屋番号未記載などの断り書きを付けず、部屋番号を推測しないでください。
+「情報未確認」と伝え、学校の公式案内・担当スタッフに確認するよう案内してください。
+参考として2025年の行事について聞かれた時だけ、【2025年の参考実績】を使い、2026年と取り違えないでください。
+未確認の情報を肯定的に断言しないでください。
+
+回答は基本的に簡潔にしてください。
+東京テクニカルカレッジについては追加された学校確認資料を優先し、学園祭の未確認事項を作り話で埋めないでください。
+公式情報は更新されることがあります。重要な場合は学校公式サイトでの再確認を案内してください。
+`;
+
+// Japanese Romaji questions should be answered in Japanese, not English.
+// Stay conservative when English question words are present.
+function isJapaneseRomaji(text) {
+  const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
+  if (!q || /[^\x00-\x7F]/.test(q)) return false;
+  const japaneseGrammar = /\b(?:wa|no|ni|ga|wo|o|de|desu|desuka|masu|masuka|ka|yo|ne)\b/;
+  const phrases = /\b(?:nihon|nippon|nihongo|nihonjin|watashi|anata|konnichiwa|ohayou|konbanwa|arigatou|gakkou|gakuensai|gakusai|geemu|kaijou|heya|kuni|rekishi|bunka|shuto|tabemono|tenki|ashita|kinou|kyou|dare|doko|itsu|nanji|nani|nan|naze|nande|donna|douyatte|ikikata|kouchou|kocho|fukukouchou|sensei|gakka|gakuen|nyuugaku|jugyouryou|ryuugakusei|shushoku|shikaku|jyuusho|juusho|denwa|koukou|senmon|daigaku|desu|desuka|masu|masuka|arimasu|arimasuka|kudasai|onegaishimasu|oshiete|shiritai|wakaranai|suki|ikitai)\b/;
+  const explicitEnglish = /\b(?:what|where|when|why|how|please|the|is|are|does|could|would|tell|show|about|explain|translate|meaning|history|capital|country|food|language)\b/;
+  if (explicitEnglish.test(q) && !japaneseGrammar.test(q)) return false;
+  const ttcSchoolRomaji = /\b(?:ttc|tokyo technical college|tokyo tekunikaru karejji|higashi nakano)\b/.test(q);
+  return phrases.test(q) || (ttcSchoolRomaji && japaneseGrammar.test(q));
+}
+
+function incompleteRomajiQuestion(text) {
+  const q = String(text || "").toLowerCase().trim().replace(/[?!.,]/g, " ").replace(/\s+/g, " ");
+  if (/^(?:nihon|nippon|nihongo)(?:\s+(?:ki|wa|no|ni|ga|de|o|wo|ka))?$/.test(q)) {
+    return "質問が途中のようです。何について知りたいか、最後まで入力してください。例：nihon no rekishi wo oshiete（日本の歴史を教えて）。";
+  }
+  return "";
+}
+
+function getRelevantSchoolData(message, history) {
+  // Do not inherit the last school's keywords for a new unrelated question.
+  // Only deictic follow-ups may use the previous topic.
+  const followUp = /^(それ|その|そこ|それについて|もっと|詳しく|他には|その学科|その先生|and that|what about|আরও|এটা)/i.test(String(message).trim());
+  const lastUser = followUp ? history.filter(x=>x?.role==='user').slice(-1).map(x=>x.text||'').join(' ') : '';
+  const query = [message, lastUser].join(' ').toLowerCase();
+  // School knowledge is a context for *TTC questions*, not a blanket answer
+  // to general education/college/teacher questions from anywhere in the world.
+  const namedTtc = /東京テクニカル|専門学校東京|小山学園|\bttc\b|tokyo technical college|tokyo tekunikaru|東中野|情報処理科|建築監督科|(?:iot|データサイエンス)\s*\+\s*ai科|東京テクニカルカレッジ/i.test(query);
+  const thisSchool = /この学校|こちらの学校|本校|当校|貴校|この専門学校|学校の(?:学費|授業|歴史|先生|校長|入学|就職|カリキュラム|奨学金|住所)|校長先生|この学科|この学校の|this school|our school|your school|the ttc school|এই স্কুল|এই কলেজ|স্কুলের (?:ফি|শিক্ষক|ঠিকানা)|কলেজের (?:ফি|শিক্ষক|ঠিকানা)/i.test(query);
+  if (!namedTtc && !thisSchool) return '';
+  // Explicitly asking about another place or institution should not silently
+  // receive TTC's tuition, teachers or curriculum.
+  if (!namedTtc && /日本の学校制度|学校一般|一般的な学校|他の学校|他校|アメリカの学校|イギリスの学校|大学全般|school system|american school|universities in|universities of|college in (?:the )?(?:usa|us|uk|india)|other schools|বিশ্বের স্কুল/i.test(message)) return '';
+  const scored = SCHOOL_DATA.entries.map(e=>({e,score:e.keywords.reduce((a,k)=>a+(query.includes(k.toLowerCase())? (k.length>2?3:1):0),0)}));
+  scored.sort((a,b)=>b.score-a.score);
+  const selected = scored.filter(x=>x.score>0 && x.e.verified !== false).slice(0,6).map(x=>x.e);
+  // General romanized school questions should still receive school overview.
+  if (/\b(ttc|tokyo technical|tokyo tekunikaru)\b/i.test(query) && !selected.length) {
+    const intro = SCHOOL_DATA.entries.find(e => e.topic === '概要・歴史');
+    if (intro) selected.push(intro);
+  }
+  // Always include the top-level school contact/overview for broad "school" questions.
+  if (!selected.length || /^(学校|学校について|school|ttc|কলেজ|স্কুল|東京テクニカルカレッジ)/i.test(message.trim())) {
+    for (const topic of ['概要・歴史','所在地・アクセス','電話・相談窓口']) {
+      const e=SCHOOL_DATA.entries.find(e=>e.topic===topic);
+      if(e && !selected.includes(e)) selected.push(e);
+    }
+  }
+  const officialFacts = getOfficialSchoolFacts(query);
+  return '【東京テクニカルカレッジ公式公開情報（2026-11-12確認。最新情報は公式ページで再確認）】\n' +
+    [officialFacts, ...selected.slice(0,5).map(e=>`■ ${e.topic}\n${e.text}\n出典: ${e.source || 'https://tec.ttc.ac.jp/'}`)].filter(Boolean).join('\n\n');
+}
+
+// Teacher-reviewed 2026 festival information. Draft records must NEVER be
+// presented to visitors as confirmed facts. Generated from the teacher JSON.
+function getApprovedFestivalContext(message) {
+  const q = String(message || "").toLowerCase();
+  // Generic questions about food, games, travel or subjects must never
+  // receive the festival information context.
+  if (!shouldUseFestivalFloorGuide(message)) return "";
+  const approved = FESTIVAL_DATA.status === "APPROVED" &&
+    Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
+  const official2026 = approved
+    ? JSON.stringify(FESTIVAL_DATA, null, 2).slice(0, 9000)
+    : "【2026年 学園祭・先生承認データ】未提供・未承認。提供されたフロアガイドの掲載情報以外の日時・価格・設備情報を推測しない。";
+  const historical = `【2025年の参考実績（2026年の予定ではありません）】
+2025年10月25日にTTC Festival 2025を実施。学校公式告知では学生企画の体験、作品展示、出店などを紹介しています。
+出典: https://tec.ttc.ac.jp/news/nid14607/（2025.10.01掲載）。
+2026年の出店や日時を2025年から推測してはいけません。`;
+  const floorGuideText = `【2026年 フロアガイド掲載情報（学校提供Excelから転記）】\n` +
+    FLOOR_GUIDE.entries.map(e => `${e.floor}${e.room ? '/' + e.room.replace(/\n/g, '') : ''}: ${e.description.replace(/\n/g,' / ')}${e.department ? ' / ' + e.department.replace(/\n/g,'・') : ''}${e.schedule ? ' / 日時:' + e.schedule.replace(/\n/g,' / ') : ''}`).join('\n') +
+    '\n※シートに記載のない開催全体の時間・料金・トイレ・避難経路等は未確認。';
+  return official2026 + "\n\n" + floorGuideText + (/2025|昨年|去年|previous year|last year|গত বছর/i.test(message) ? "\n\n" + historical : "");
+}
+
+function corsHeaders(origin) {
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store"
+  };
+}
+
+function json(data, status, headers) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers
+  });
+}
+
+// Quota-saving controls. Queue is per Worker isolate (not a global distributed queue).
+const MAX_IN_FLIGHT = 3;
+const MAX_WAITING = 20;
+let inFlight = 0;
+const waiting = [];
+const sharedRequests = new Map();
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function withLocalQueue(work) {
+  if (inFlight >= MAX_IN_FLIGHT) {
+    if (waiting.length >= MAX_WAITING) {
+      const error = new Error("BUSY"); error.status = 503; throw error;
+    }
+    await new Promise(resolve => waiting.push(resolve));
+  } else { inFlight++; }
+  try { return await work(); }
+  finally {
+    const next = waiting.shift();
+    if (next) next(); else inFlight--;
+  }
+}
+
+async function requestGemini(endpoint, apiKey, payload, timeoutMs = 22000) {
+  // Retry ONLY brief provider overloads; do not repeatedly consume a daily quota.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(payload), signal: controller.signal
+      });
+      const result = await response.json().catch(() => ({}));
+      // A 429 is a rate/quota signal. Retrying it immediately can spend more
+      // requests and worsen festival traffic, so return it to the caller.
+      // Retry only a transient 503, once, with small jitter.
+      if (attempt === 0 && response.status === 503) {
+        await pause(500 + Math.floor(Math.random() * 500));
+        continue;
+      }
+      return { response, result };
+    } finally { clearTimeout(timer); }
+  }
+}
+
+
+// Chat provider fallback: Gemini -> Groq -> Cloudflare Workers AI -> OpenRouter.
+// Each configured provider is attempted in order if the previous one fails.
+function geminiPayloadToMessages(payload) {
+  const messages = [];
+  const system = (payload.systemInstruction?.parts || []).map(p => p.text || '').join('\n').trim();
+  if (system) messages.push({ role: 'system', content: system });
+  for (const item of payload.contents || []) {
+    const content = (item.parts || []).map(p => p.text || '').join('\n').trim();
+    if (content) messages.push({ role: item.role === 'model' ? 'assistant' : 'user', content });
+  }
+  return messages;
+}
+
+async function requestGroq(env, payload, timeoutMs = 22000) {
+  if (!env.GROQ_API_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: String(env.GROQ_MODEL || 'openai/gpt-oss-20b'),
+        messages: geminiPayloadToMessages(payload),
+        temperature: 0.5,
+        max_tokens: 1200
+      }),
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    const text = typeof data.choices?.[0]?.message?.content === 'string'
+      ? data.choices[0].message.content.trim()
+      : '';
+    return {
+      provider: 'groq',
+      response: { ok: response.ok && !!text, status: response.ok && !text ? 502 : response.status },
+      result: { candidates: [{ content: { parts: [{ text }] } }], error: data.error }
+    };
+  } finally { clearTimeout(timer); }
+}
+
+async function requestCloudflareAI(env, payload) {
+  if (!env.AI || typeof env.AI.run !== 'function') return null;
+  const model = String(env.CF_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  const result = await env.AI.run(model, {
+    messages: geminiPayloadToMessages(payload),
+    max_tokens: 1200,
+    temperature: 0.5
+  });
+  const text = typeof result?.response === 'string' ? result.response :
+    typeof result?.result?.response === 'string' ? result.result.response : '';
+  return {
+    provider: 'cloudflare',
+    response: { ok: !!text, status: text ? 200 : 502 },
+    result: { candidates: [{ content: { parts: [{ text }] } }] }
+  };
+}
+
+// OpenRouter uses the OpenAI-compatible Chat Completions API.
+// The free model pool can change availability and may be rate limited.
+async function requestOpenRouter(env, payload, timeoutMs = 22000) {
+  if (!env.OPENROUTER_API_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://terafes04.vercel.app/',
+        'X-Title': 'TTC Gakuen-sai AI Assistant'
+      },
+      body: JSON.stringify({
+        model: String(env.OPENROUTER_MODEL || 'openrouter/free'),
+        messages: geminiPayloadToMessages(payload),
+        temperature: 0.5,
+        max_tokens: 1200
+      }),
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    const text = data.choices?.[0]?.message?.content;
+    return {
+      provider: 'openrouter',
+      response: { ok: response.ok && typeof text === 'string' && !!text.trim(), status: response.ok && typeof text === 'string' && !!text.trim() ? 200 : (response.ok ? 502 : response.status) },
+      result: {
+        candidates: [{ content: { parts: [{ text: typeof text === 'string' ? text : '' }] } }],
+        error: data.error
+      }
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function requestWithFallback(env, endpoint, payload) {
+  const failures = [];
+  const attempt = async (name, run) => {
+    try {
+      const outcome = await run();
+      if (!outcome) {
+        failures.push({ provider: name, status: 'NOT_CONFIGURED' });
+        return null;
+      }
+      if (outcome.response?.ok) { console.log('[AI] Provider success', name); return { ...outcome, provider: name }; }
+      failures.push({ provider: name, status: outcome.response?.status || 502 });
+      console.warn('[AI] Provider unavailable', {
+  provider: name,
+  status: outcome.response?.status,
+  error: outcome.result?.error?.message ||
+         outcome.result?.error?.status ||
+         'Unknown provider error'
+});
+    } catch (error) {
+      failures.push({ provider: name, status: error?.name || 'NETWORK_ERROR' });
+      console.warn('[AI] Provider exception', {
+  provider: name,
+  name: error?.name,
+  message: error?.message
+});
+    }
+    return null;
+  };
+
+  // Try the remaining providers even if Gemini's model/key is invalid.
+  // Each provider has its own credentials and availability.
+  const gemini = await attempt('gemini', () => env.GEMINI_API_KEY
+    ? requestGemini(endpoint, env.GEMINI_API_KEY, payload)
+    : null);
+  if (gemini) return gemini;
+
+  const groq = await attempt('groq', () => requestGroq(env, payload));
+  if (groq) return groq;
+
+  const cloudflare = await attempt('cloudflare', () => requestCloudflareAI(env, payload));
+  if (cloudflare) return cloudflare;
+
+  const openrouter = await attempt('openrouter', () => requestOpenRouter(env, payload));
+  if (openrouter) return openrouter;
+
+  console.error('[AI] All configured providers failed', failures);
+  return {
+    provider: 'none',
+    response: { ok: false, status: 503 },
+    result: { error: { status: 'ALL_PROVIDERS_FAILED' } }
+  };
+}
+async function hashString(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function cacheRead(request, type, keyData) {
+  try {
+    const key = await hashString(JSON.stringify(keyData));
+    const cacheKey = new Request(new URL(`/__quota_cache/${type}/${key}`, request.url).toString());
+    const entry = await caches.default.match(cacheKey);
+    return { cacheKey, data: entry ? await entry.json() : null };
+  } catch { return { cacheKey: null, data: null }; }
+}
+
+async function cacheWrite(cacheKey, data, seconds, context) {
+  if (!cacheKey) return;
+  const response = new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${seconds}` } });
+  try {
+    if (context?.waitUntil) context.waitUntil(caches.default.put(cacheKey, response));
+    else await caches.default.put(cacheKey, response);
+  } catch { /* Cache is best-effort. */ }
+}
+
+function safeFaq(message, language) {
+  const q = String(message).toLowerCase().trim();
+  if (/^(?:ttc|東京テクニカルカレッジ|tokyo technical college)(?:とは|って何|とは何ですか|とは\?|ってどんな学校| とは)?[？?。 ]*$/i.test(q)) {
+    if (language === 'bn-BD') return 'TTC (東京テクニカルカレッジ) জাপানের টোকিওতে অবস্থিত একটি বিশেষায়িত কারিগরি কলেজ। কোর্স ও ভর্তি সম্পর্কে সর্বশেষ তথ্য স্কুলের অফিসিয়াল ওয়েবসাইটে দেখুন: https://tec.ttc.ac.jp/';
+    if (language === 'en-US') return 'Tokyo Technical College (TTC) is a vocational college in Tokyo, Japan. Check its official website for the latest courses and admissions: https://tec.ttc.ac.jp/';
+    return '東京テクニカルカレッジ（TTC）は東京都にある専門学校です。学科・入学に関する最新情報は公式サイトをご確認ください：https://tec.ttc.ac.jp/';
+  }
+  if (/^(?:学校の公式サイト|公式サイト|official website|school website|স্কুলের ওয়েবসাইট)[？?。 ]*$/i.test(q)) {
+    return language === 'bn-BD' ? 'স্কুলের অফিসিয়াল ওয়েবসাইট: https://tec.ttc.ac.jp/' :
+      language === 'en-US' ? 'Official school website: https://tec.ttc.ac.jp/' :
+      '学校の公式サイトはこちらです：https://tec.ttc.ac.jp/';
+  }
+  return null;
+}
+
+function publicSchoolQuestion(q) {
+  const text = String(q || '').trim();
+  const school = /\bTTC\b|東京テクニカル|専門学校|学校|学園祭|文化祭|東中野|校舎|学科|学校祭|festival|tokyo technical college|college|স্কুল|কলেজ|উৎসব/i.test(text);
+  const sensitive = /@|https?:|\d{5,}|パスワード|住所は|私の|個人|電話番号|メール|my |mine|আমার|password|email|address|account|secret|token/i.test(text);
+  return !!school && !sensitive && text.length <= 140;
+}
+
+// Shared quota protection: all Cloudflare Worker isolates consult one SQLite Durable Object.
+export class FestivalQuota {
+  constructor(ctx) {
+    this.sql = ctx.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS counters (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS faq_cache (key TEXT PRIMARY KEY, reply TEXT NOT NULL, expires INTEGER NOT NULL)');
+  }
+  async fetch(request) {
+    const { action, client, kind, limits, cacheKey, reply, ttl } = await request.json();
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    const minute = now.toISOString().slice(0, 16);
+    const get = key => this.sql.exec('SELECT count FROM counters WHERE bucket=?', key).toArray()[0]?.count ?? 0;
+    if (action === 'stats') {
+      return Response.json({
+        day,
+        admittedToday: get('a:'+day),
+        blockedToday: get('b:'+day),
+        chatToday: get('chat:'+day),
+        voiceToday: get('voice:'+day),
+        provider429Today: get('p429:'+day),
+        providerErrorsToday: get('perr:'+day),
+        currentMinute: get('m:'+minute),
+        requesterToday: get('u:'+day+':'+client),
+        requesterCurrentMinute: get('um:'+minute+':'+client),
+        faqCacheHitsToday: get('hit:'+day),
+        faqCacheStoresToday: get('store:'+day),
+        limits,
+        note: 'Worker-side counters only. Daily counters reset at UTC midnight. Requester counters refer to the IP making this admin request.'
+      });
+    }
+    if (action === 'cache_get') {
+      if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey)) return Response.json({ hit:false });
+      const row=this.sql.exec('SELECT reply,expires FROM faq_cache WHERE key=?',cacheKey).toArray()[0];
+      if (!row || row.expires <= Date.now()) return Response.json({hit:false});
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1','hit:'+day);
+      return Response.json({hit:true,reply:row.reply});
+    }
+    if (action === 'cache_put') {
+      if (typeof cacheKey !== 'string' || !/^[a-f0-9]{64}$/.test(cacheKey) || typeof reply !== 'string' || reply.length>5000 || !reply || !Number.isInteger(ttl) || ttl<60 || ttl>1800) return Response.json({ok:false},{status:400});
+      this.sql.exec('INSERT INTO faq_cache(key,reply,expires) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET reply=excluded.reply,expires=excluded.expires',cacheKey,reply,Date.now()+ttl*1000);
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1','store:'+day);
+      if (Math.random()<0.04) {
+        this.sql.exec('DELETE FROM faq_cache WHERE expires < ?',Date.now());
+        this.sql.exec("DELETE FROM counters WHERE bucket LIKE 'u:%' AND bucket < ?",'u:'+new Date(Date.now()-3*86400000).toISOString().slice(0,10));
+      }
+      return Response.json({ok:true});
+    }
+    if (action === 'event') {
+      const key = (kind === '429' ? 'p429:' : 'perr:') + day;
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', key);
+      return Response.json({ ok:true });
+    }
+    if (action !== 'admit') return Response.json({error:'Unknown quota action'},{status:400});
+    const keys = [['m:'+minute,limits.globalMinute],['a:'+day,limits.globalDay],['u:'+day+':'+client,limits.userDay],['um:'+minute+':'+client,limits.userMinute]];
+    const exceeded = keys.find(([key,limit]) => get(key)>=limit);
+    if (exceeded) {
+      const [key, limit] = exceeded;
+      const reason = key.startsWith('um:') ? 'USER_MINUTE_LIMIT'
+        : key.startsWith('u:') ? 'USER_DAILY_LIMIT'
+        : key.startsWith('m:') ? 'GLOBAL_MINUTE_LIMIT'
+        : 'GLOBAL_DAILY_LIMIT';
+      const retryAfter = reason.includes('MINUTE')
+        ? Math.max(1, 60 - now.getUTCSeconds())
+        : Math.max(1, Math.ceil((Date.parse(day+'T00:00:00.000Z')+86400000-Date.now())/1000));
+      this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', 'b:'+day);
+      console.warn('[QUOTA] Request blocked', {reason, current:get(key), limit, retryAfter});
+      return Response.json({allowed:false,reason,retryAfter});
+    }
+    for(const [key] of keys) this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1',key);
+    this.sql.exec('INSERT INTO counters(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1',kind+':'+day);
+    if (Math.random()<0.01) this.sql.exec("DELETE FROM counters WHERE bucket LIKE 'um:%' AND bucket < ?", 'um:'+new Date(Date.now()-180000).toISOString().slice(0,16));
+    return Response.json({ allowed:true });
+  }
+}
+
+function quotaStub(env) {
+  if (!env.FESTIVAL_QUOTA) throw Object.assign(new Error('QUOTA_NOT_CONFIGURED'),{status:503});
+  return env.FESTIVAL_QUOTA.get(env.FESTIVAL_QUOTA.idFromName('festival-global-v1'));
+}
+
+const clampLimit=(value,fallback)=>Math.max(1,Math.min(100000,Number(value)||fallback));
+
+async function quotaAction(env, request, kind='chat', action='admit', additional={}) {
+  const address = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const secret = env.RATE_LIMIT_SALT || env.GEMINI_API_KEY || 'not-configured';
+  const client = (await hashString(secret+':'+address)).slice(0,20);
+  const limits = {
+    globalMinute:clampLimit(env.GLOBAL_REQUESTS_PER_MINUTE,25),
+    globalDay:clampLimit(env.GLOBAL_REQUESTS_PER_DAY,400),
+    userMinute:clampLimit(env.USER_REQUESTS_PER_MINUTE,6),
+    userDay:clampLimit(env.USER_REQUESTS_PER_DAY,50)
+  };
+  const result=await quotaStub(env).fetch('https://quota.internal/',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,kind,client,limits,...additional})});
+  if(!result.ok) throw Object.assign(new Error('QUOTA_UNAVAILABLE'),{status:503});
+  return result.json();
+}
+
+async function admitted(env,request,kind,headers) {
+  try {
+    const answer=await quotaAction(env,request,kind);
+    if (!answer.allowed) {
+      // Return the precise Worker-side quota reason. Do not bypass or reset
+      // shared Durable Object counters: deployments do not reset daily usage.
+      const reason = typeof answer.reason === 'string' ? answer.reason : 'QUOTA_LIMIT_REACHED';
+      const retryAfter = Number.isFinite(Number(answer.retryAfter))
+        ? Math.max(1, Math.ceil(Number(answer.retryAfter))) : 60;
+      return json({
+        error: 'Festival AI request limit reached. Please retry later. School FAQ remains available.',
+        code: 'QUOTA_LIMIT_REACHED',
+        reason,
+        retryAfter
+      }, 429, { ...headers, 'Retry-After': String(retryAfter) });
+    }
+    return null;
+  } catch (error) {
+    console.error('Shared quota unavailable:',error?.name);
+    return json({error:'AI is temporarily unavailable. Please try again later.'},503,headers);
+  }
+}
+
+function trackProviderError(env,request,status,ctx) {
+  const job=quotaAction(env,request,status===429?'429':'error','event').catch(()=>{});
+  ctx?.waitUntil?.(job);
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const origin = request.headers.get("Origin") || "";
+
+    const allowedOrigins = [
+      DEFAULT_ORIGIN,
+      "https://terafes04.vercel.app",
+      ...String(env.EXTRA_ALLOWED_ORIGINS || "")
+        .split(",")
+        .map(x => x.trim())
+        .filter(Boolean)
+    ];
+
+    const allowed = allowedOrigins.includes(origin);
+    const headers = corsHeaders(allowed ? origin : DEFAULT_ORIGIN);
+    const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      if (!allowed) {
+        return json({ error: "Origin not allowed" }, 403, headers);
+      }
+      return new Response(null, { status: 204, headers });
+    }
+
+    if (url.pathname === "/admin/usage") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, headers);
+      const token = request.headers.get("Authorization") || "";
+      if (!env.ADMIN_STATS_TOKEN || token !== `Bearer ${env.ADMIN_STATS_TOKEN}`) return json({error:"Unauthorized"},401,headers);
+      try { return json(await quotaAction(env,request,'chat','stats'),200,headers); }
+      catch { return json({error:'Monitoring unavailable'},503,headers); }
+    }
+
+    if (url.pathname === "/transcribe") {
+      if (!allowed) return json({ error: "Origin not allowed" }, 403, headers);
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, headers);
+      if (!env.GEMINI_API_KEY) return json({ error: "Gemini API Key is not configured" }, 503, headers);
+      if (Number(request.headers.get("Content-Length") || 0) > 3_000_000) {
+        return json({ error: "Recording too large" }, 413, headers);
+      }
+      let voiceData;
+      try {
+        const body = await request.text();
+        if (body.length > 3_000_000) return json({ error: "Recording too large" }, 413, headers);
+        voiceData = JSON.parse(body);
+      } catch { return json({ error: "Invalid audio request" }, 400, headers); }
+      const audio = voiceData?.audio;
+      const mimeType = voiceData?.mimeType;
+      const allowedTypes = ["audio/webm", "audio/mp4", "audio/ogg", "audio/wav", "audio/mpeg"];
+      const cleanedType = typeof mimeType === "string" ? mimeType.split(";")[0].toLowerCase() : "";
+      if (!allowedTypes.includes(cleanedType) || typeof audio !== "string" || audio.length < 100 || audio.length > 2_900_000 || !/^[a-zA-Z0-9+/=]+$/.test(audio)) {
+        return json({ error: "Invalid audio data or audio type" }, 400, headers);
+      }
+      const voiceLimit = await admitted(env, request, "voice", headers);
+      if (voiceLimit) return voiceLimit;
+      const model = String(env.GEMINI_AUDIO_MODEL || "gemini-2.5-flash").trim();
+      const japaneseOnly = voiceData?.language === "ja-JP";
+      try {
+        const { response, result } = await withLocalQueue(() => requestGemini(
+          "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
+          env.GEMINI_API_KEY,
+          { contents: [{ role: "user", parts: [
+            { text: japaneseOnly
+              ? "Transcribe this Japanese speech in standard Japanese writing (kanji, hiragana and katakana). Never translate or answer. Return ONLY the spoken Japanese words. If silent or unintelligible return an empty response."
+              : "Transcribe the spoken audio exactly in the ORIGINAL spoken language and ORIGINAL writing system. Automatically identify language. Do not translate or answer the speech. Return only the transcript, without explanations or labels. If silent/unintelligible, return an empty response." },
+            { inlineData: { mimeType: cleanedType, data: audio } }
+          ] }], generationConfig: { temperature: 0, maxOutputTokens: 1400 } }, 24000
+        ));
+        if (!response.ok) {
+          trackProviderError(env,request,response.status,ctx);
+          console.error("Gemini transcription error", { model, status: response.status, providerStatus: result?.error?.status });
+          return json({ error: response.status === 429 ? "Voice AI usage limit reached" : "Voice transcription service unavailable" }, response.status === 429 ? 429 : 502, headers);
+        }
+        const transcript = (result.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+        return json({ transcript: transcript.slice(0, 1500) }, 200, headers);
+      } catch (error) {
+        console.error("Voice transcription request failed", error?.name);
+        return json({ error: error?.status === 503 ? "Voice service is busy; retry shortly" : "Voice recognition timed out" }, error?.status === 503 ? 503 : 504, headers);
+      }
+    }
+
+    if (url.pathname !== "/chat") {
+      return json({ error: "Not found" }, 404, headers);
+    }
+
+    if (!allowed) {
+      return json({ error: "Origin not allowed" }, 403, headers);
+    }
+
+    if (request.method !== "POST") {
+      return json({ error: "Method not allowed" }, 405, headers);
+    }
+
+        if (
+      Number(request.headers.get("Content-Length") || 0) > 14000
+    ) {
+      return json({ error: "Request too large" }, 413, headers);
+    }
+
+    let data;
+
+    try {
+      data = await request.json();
+    } catch {
+      return json({ error: "Invalid JSON" }, 400, headers);
+    }
+
+    const message =
+      typeof data?.message === "string"
+        ? data.message.trim()
+        : "";
+
+    if (!message || message.length > MAX_MESSAGE) {
+      return json({
+        error: "Message must contain 1-1200 characters"
+      }, 400, headers);
+    }
+
+    // Keep verified offline FAQs working even when the Gemini secret is absent.
+    // Check the key only immediately before the external Gemini request.
+    const model = String(
+      env.GEMINI_MODEL || DEFAULT_MODEL
+    ).trim();
+
+    const history = Array.isArray(data.history)
+      ? data.history.slice(-10)
+      : [];
+
+    const allowedLocales = new Set(["bn-BD","en-US","ja-JP","hi-IN","ur-PK","ar-SA","es-ES","fr-FR","de-DE","pt-BR","zh-CN","ko-KR","id-ID","th-TH","vi-VN","si-LK"]);
+    const responseLanguage = typeof data.responseLanguage === "string" && allowedLocales.has(data.responseLanguage)
+      ? data.responseLanguage : "";
+
+    const LANGUAGE_NAMES = {
+      "bn-BD": "Bengali (বাংলা)", "en-US": "English", "ja-JP": "Japanese (日本語)",
+      "hi-IN": "Hindi", "ur-PK": "Urdu", "ar-SA": "Arabic", "es-ES": "Spanish",
+      "fr-FR": "French", "de-DE": "German", "pt-BR": "Portuguese",
+      "zh-CN": "Chinese", "ko-KR": "Korean", "id-ID": "Indonesian",
+      "th-TH": "Thai", "vi-VN": "Vietnamese", "si-LK": "Sinhala"
+    };
+
+    const romajiJapanese = isJapaneseRomaji(message);
+    const effectiveResponseLanguage = romajiJapanese ? "ja-JP" : responseLanguage;
+
+    // 2026 floor/room/exhibit facts are sourced from the user's school XLSX.
+    const romajiClarification = incompleteRomajiQuestion(message);
+    if (romajiClarification) return json({ reply: romajiClarification, informationStatus: "INCOMPLETE_ROMAJI" }, 200, headers);
+
+    const floorReply = answerFloorGuide(message, effectiveResponseLanguage ||
+      (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US"));
+
+    if (floorReply) return json({ reply: floorReply, informationStatus: "SCHOOL_FLOOR_GUIDE_2026" }, 200, headers);
+
+    const approved2026 = FESTIVAL_DATA.status === "APPROVED" &&
+      Boolean(FESTIVAL_DATA.approved_by && FESTIVAL_DATA.last_verified);
+
+    const refersTo2025 = /2025|昨年|去年|last year|previous year|গত বছর/i.test(message);
+
+    const isFestivalSpecific = shouldUseFestivalFloorGuide(message);
+
+    const isFestivalQuickTopic = /^(食べ物はどこですか|ゲームはありますか|ステージについて教えて|会場の場所を教えて|開催時間を教えて|トイレはどこですか)$/.test(message.trim());
+
+    const seeksSpecifics = /いつ|日時|日付|何時|時間|値段|料金|価格|いくら|どこ|場所|何階|教室|マップ|地図|予定|出店|屋台|食品|食べ物|フード|ゲーム|ステージ|会場|内容|スケジュール|タイムテーブル|おすすめ|トイレ|受付|日程|start|when|where|date|time|price|food|stall|map|game|stage|schedule|cost|location|event|কবে|কোথায়|দাম|সময়|খাবার/i.test(message);
+
+    if (!approved2026 && !refersTo2025 && ((isFestivalSpecific && seeksSpecifics) || isFestivalQuickTopic)) {
+      const lang = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? "bn-BD" : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? "ja-JP" : "en-US");
+
+      const reply = lang === "bn-BD"
+        ? "স্কুলের দেওয়া ২০২৬ ফ্লোর গাইডে প্রদর্শনী ও রুমের তথ্য আছে। তবে উৎসবের সামগ্রিক সময়, মূল্য ও অন্যান্য অনুল্লিখিত তথ্য নিশ্চিত করা যায়নি। অফিসিয়াল ঘোষণা বা স্টাফের সঙ্গে যাচাই করুন।"
+        : lang === "en-US"
+          ? "The supplied 2026 floor guide lists exhibits and rooms, but overall festival opening hours, prices and other unlisted details remain unconfirmed. Please check official announcements or ask festival staff."
+          : "2026年のフロア別展示・教室情報は提供されたフロアガイドで確認できますが、開催全体の時間・料金など、シートにない詳細は未確認です。学校の公式案内または担当の先生にご確認ください。";
+
+      return json({ reply, informationStatus: "UNVERIFIED_2026" }, 200, headers);
+    }
+
+    const inferredLanguage = effectiveResponseLanguage || (/[\u0980-\u09ff]/u.test(message) ? 'bn-BD' : /[\u3040-\u30ff\u3400-\u9fff]/u.test(message) ? 'ja-JP' : 'en-US');
+
+    if (!history.length) {
+      const faq = safeFaq(message, inferredLanguage);
+      if (faq) return json({ reply: faq }, 200, headers);
+    }
+
+    const cacheable = history.length === 0 && publicSchoolQuestion(message);
+
+    const cacheKeyData = {
+      v: 1,
+      model,
+      message: message.normalize('NFKC').toLowerCase(),
+      language: effectiveResponseLanguage,
+      festivalVersion: FESTIVAL_DATA.last_verified || FESTIVAL_DATA.status,
+      schoolVersion: '2026-11-12-official-2',
+      routingVersion: 'general-topics-v3'
+    };
+
+    const cached = cacheable
+      ? await cacheRead(request, 'chat', cacheKeyData)
+      : { cacheKey: null, data: null };
+
+    if (cached.data?.reply) return json(cached.data, 200, headers);
+
+    const sharedKey = cacheable
+      ? await hashString('public-faq-v2:' + JSON.stringify(cacheKeyData))
+      : null;
+
+    if (sharedKey) {
+      try {
+        const result = await quotaAction(env, request, 'chat', 'cache_get', { cacheKey: sharedKey });
+
+        if (result.hit && typeof result.reply === 'string') {
+          if (cached.cacheKey) await cacheWrite(cached.cacheKey, { reply: result.reply }, 900, ctx);
+          return json({ reply: result.reply }, 200, headers);
+        }
+      } catch (error) {
+        console.warn('Shared cache unavailable:', error?.name);
+      }
+    }
+
+
+    const targetLanguage = LANGUAGE_NAMES[effectiveResponseLanguage] || "the language of the latest user message";
+
+    const languageRule = `
+CRITICAL OUTPUT LANGUAGE POLICY:
+If the latest user question is Japanese written in Romaji (Latin-letter transcription), answer in natural Japanese script (漢字・ひらがな・カタカナ), NOT English or Romaji.
+Examples: "TTC no kouchou wa dare desu ka?" -> Japanese; "gakkou wa doko desu ka" -> Japanese.
+Plain English questions, such as "What is the school address?", must still receive English answers.
+Respond ONLY in ${targetLanguage}. This applies to EVERY sentence, introduction,
+summary, closing sentence, follow-up question, and disclaimer.
+Never append Japanese greetings or festival advertising when the question is in Bengali/English/etc.
+If school source notes are in Japanese, translate or transliterate them into ${targetLanguage}.
+Keep proper nouns in original form ONLY if necessary for an exact address, school name, or official title.
+Do not add another language unless the user explicitly requests translation or bilingual output.
+If the user writes in Bengali, respond exclusively in natural Bengali script (বাংলা), not Japanese.
+If the user writes in English, respond exclusively in English, not Japanese.
+Your final answer should directly address the latest question; no unrelated festival promotion.
+IMPORTANT: Treat the latest user question as the main topic. If the user asks about Tokyo foods, restaurants, travel, math, software, science, another school, or any topic unrelated to Tokyo Technical College, answer that question normally. Never show the festival floor guide for a generic food/game question. General world knowledge is not restricted to this school; do not insert school URLs or facts when the question is unrelated. Distinguish current facts from facts that may be out of date.
+For TTC official facts, follow only the official sources provided below. If details (e.g. a particular teacher's name, full faculty roster, exact 2026 tuition/waiver eligibility, room number or placements) are not verified, say they are unverified and link to the appropriate official page. No claim that all students receive free tuition or guaranteed jobs. The included source pages are a 2026-11-12 snapshot, not live browsing.
+`;
+
+    const contents = [];
+
+    for (const entry of history) {
+      if (
+        !entry ||
+        !["user", "model"].includes(entry.role) ||
+        typeof entry.text !== "string"
+      ) {
+        continue;
+      }
+
+      const text = entry.text
+        .slice(0, entry.role === "user" ? 1200 : 2500)
+        .trim();
+
+      if (text) {
+        contents.push({
+          role: entry.role,
+          parts: [{ text }]
+        });
+      }
+    }
+
+    contents.push({
+      role: "user",
+      parts: [{ text: message }]
+    });
+
+    try {
+      const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
+        encodeURIComponent(model) + ":generateContent";
+
+      const payload = {
+        systemInstruction: {
+          parts: [{
+            text: SYSTEM_TEXT + languageRule +
+              "\n\n" + getApprovedFestivalContext(message) +
+              "\n\n" + getRelevantSchoolData(message, history)
+          }]
+        },
+        contents,
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 1200
+        }
+      };
+
+      // Deduplicate simultaneous public requests before quota admission.
+      const dedupeKey = cacheable ? await hashString(JSON.stringify(cacheKeyData)) : null;
+
+      let promise = dedupeKey && sharedRequests.get(dedupeKey);
+
+      if (!promise) {
+        promise = (async () => {
+          const quotaResponse = await admitted(env, request, "chat", headers);
+          if (quotaResponse) return { quotaResponse };
+
+          return withLocalQueue(() => requestWithFallback(env, endpoint, payload));
+        })();
+
+        if (dedupeKey) {
+          sharedRequests.set(dedupeKey, promise);
+
+          promise.finally(() => {
+            if (sharedRequests.get(dedupeKey) === promise) {
+              sharedRequests.delete(dedupeKey);
+            }
+          }).catch(() => {});
+        }
+      }
+
+      const outcome = await promise;
+
+      if (outcome.quotaResponse) return outcome.quotaResponse;
+
+      const { response, result } = outcome;
+
+      if (!response.ok) {
+        trackProviderError(env, request, response.status, ctx);
+
+        console.error("AI provider error:", {
+          provider: outcome.provider || "gemini",
+          model,
+          httpStatus: response.status,
+          providerStatus: result?.error?.status
+        });
+
+        if (result?.error?.status === 'ALL_PROVIDERS_FAILED') {
+          return json({ error: 'All configured AI providers are unavailable.', code: 'ALL_PROVIDERS_FAILED' }, 503, headers);
+        }
+
+        if (response.status === 429) {
+          return json({ error: "AIの利用上限に達しました。" }, 429, headers);
+        }
+
+        if (response.status === 404) {
+          return json({ error: "AI model is unavailable. Please check provider configuration." }, 502, headers);
+        }
+
+        return json({ error: "AIサービスに接続できませんでした。" }, 502, headers);
+      }
+
+      const reply = (
+        result.candidates?.[0]?.content?.parts || []
+      )
+        .map(part =>
+          typeof part.text === "string" ? part.text : ""
+        )
+        .join("")
+        .trim();
+
+      if (!reply) {
+        return json({
+          error: "AIから回答を取得できませんでした。"
+        }, 502, headers);
+      }
+
+      const resultData = { reply: reply.slice(0, 5000) };
+
+      if (cacheable) {
+        await cacheWrite(cached.cacheKey, resultData, 900, ctx);
+
+        if (sharedKey) {
+          ctx?.waitUntil?.(
+            quotaAction(env, request, 'chat', 'cache_put', {
+              cacheKey: sharedKey,
+              reply: resultData.reply,
+              ttl: 900
+            }).catch(() => {})
+          );
+        }
+      }
+
+      return json(resultData, 200, headers);
+
+    } catch (error) {
+      console.error("AI provider request failed:", error?.name);
+
+      return json({
+        error: error?.status === 503
+          ? "AIが混み合っています。少し後でお試しください。"
+          : "AIへの接続がタイムアウトしました。"
+      }, error?.status === 503 ? 503 : 504, headers);
+    }
+  }
+};
