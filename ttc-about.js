@@ -7,9 +7,9 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const members = [
     { name:'Ridoy', initials:'R', photo:'assets/ridoy-profile.png', role:'UI Design / AI API Integration', description:'チャットボット画面のデザインとAI API接続を担当。' },
-    { name:'Islam', initials:'I', role:'Festival Information（担当確認中）', description:'学園祭情報の整理・フロア案内データの作成（仮案）。' },
-    { name:'Emeisha', initials:'E', role:'Multilingual Support（担当確認中）', description:'多言語表現の確認・案内文の作成（仮案）。' },
-    { name:'Nimu Sara', initials:'NS', role:'Testing & Quality（担当確認中）', description:'動作テスト・使いやすさの確認（仮案）。' }
+    { name:'Islam', initials:'I', photo:'assets/islam-profile.png', role:'Festival Information（担当確認中）', description:'学園祭情報の整理・フロア案内データの作成（仮案）。' },
+    { name:'Emeisha', initials:'E', photo:'assets/emeisha-profile.png', role:'Multilingual Support（担当確認中）', description:'多言語表現の確認・案内文の作成（仮案）。' },
+    { name:'Nimu Sara', initials:'NS', photo:'assets/nimu-sara-profile.png', role:'Testing & Quality（担当確認中）', description:'動作テスト・使いやすさの確認（仮案）。' }
   ];
   const features = [
     ['🤖 AIチャット','学校・学園祭、学習・翻訳・プログラミングなどの質問に回答します。'],
